@@ -87,3 +87,8 @@ Run the application with the following command:
 * calibration_ui.py: Dedicated GUI dialogue for pixel-to-wavelength calibration.
 * pressureCalc.py: Module for pressure calculation logic from Ruby fluorescence.
 * spectrometerConfig.json: Configuration file for gratings and ROI settings (generated automatically on first run).
+
+# Acknowledgement
+
+This program was developed from scratch, but many of my ideas about its design and functions come from [Rubycond](https://github.com/CelluleProjet/Rubycond) software developed by Yiuri Garino (yiuri.garino (at) cnrs.fr), which I heavily used during my stay at IMPMC, Sorbonne Universite, CNRS UMR 7590, Paris, France, where I worked with Dr Stefan Klotz.
+This program was developed using spectrometers at Geochemistry laboratory lead by Prof Hiroyuki Kagi and Prof Kazuki Komatsu, at the Geochemical Research Center, Graduate School of Science, The University of Tokyo. I used Gemini Pro for coding, without which this program would never be completed.

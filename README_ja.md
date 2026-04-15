@@ -87,3 +87,7 @@ Andor製のカメラ（検出器）および分光器を制御し、スペクト
 * calibration_ui.py: ピクセルから波長へのキャリブレーションを行うためのUI。
 * pressureCalc.py: ルビー蛍光から圧力を算出するモジュール。
 * spectrometerConfig.json: 回折格子の設定等を保存する設定ファイル（初回起動時に生成）。
+
+# 謝辞
+このプログラムは私が作成したものですが、機能やデザインに関する多くのアイデアは、私がStefan Klotz氏との共同研究のためにフランス・パリ・ソルボンヌ大学-CNRS UMR 7590 IMPMCに滞在した際によく使用していた、[Rubycond](https://github.com/CelluleProjet/Rubycond)プログラムから着想されたものです。Rubycondの開発者であるYiuri Garino (yiuri.garino (at) cnrs.fr)氏に感謝申し上げます。またこのプログラムは東京大学大学院理学系研究科附属地殻科学実験施設 鍵裕之
+教授・小松一生准教授の研究室で開発されました。最後に、開発に際してGeminiに多くの有用な助けを借りたことを申し添えます。
