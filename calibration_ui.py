@@ -55,6 +55,14 @@ class CalibrationWindow(QDialog):
         
         self.init_ui()
         
+        # Main UIの設定から初期単位を合わせる
+        main_window = self.parent()
+        if main_window and main_window.radio_spec_mode_raman.isChecked():
+            self.radio_unit_raman.setChecked(True)
+        else:
+            self.radio_unit_wl.setChecked(True)
+        self.update_table_header()
+        
         if self.camera_thread:
             self.camera_thread.data_ready.connect(self.on_data_ready)
 
@@ -101,6 +109,19 @@ class CalibrationWindow(QDialog):
         self.spin_acq_time.setDecimals(3)
         self.spin_acq_time.editingFinished.connect(self.update_acq_time)
         acq_time_layout.addWidget(self.spin_acq_time)
+
+        # --- Unit Selection (Wavelength vs Raman Shift) ---
+        unit_layout = QHBoxLayout()
+        self.radio_unit_wl = QRadioButton("Wavelength (nm)")
+        self.radio_unit_raman = QRadioButton("Raman shift (cm⁻¹)")
+        self.radio_unit_wl.setChecked(True)
+        self.radio_unit_wl.toggled.connect(self.update_table_header)
+        self.radio_unit_raman.toggled.connect(self.update_table_header)
+        unit_layout.addWidget(QLabel("Calibration Unit:"))
+        unit_layout.addWidget(self.radio_unit_wl)
+        unit_layout.addWidget(self.radio_unit_raman)
+        unit_layout.addStretch()
+        # ------------------------------------------------
         
         find_peaks_layout = QHBoxLayout()
         self.btn_find_peaks = QPushButton("Find peaks")
@@ -131,9 +152,9 @@ class CalibrationWindow(QDialog):
         neon_layout.addWidget(self.radio_neon_no)
         
         self.table = QTableWidget(0, 3)
-        self.table.setHorizontalHeaderLabels(["Peak pos. (px)", "Use", "Value (nm)"])
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.table.setAlternatingRowColors(True)
+        self.update_table_header()
         
         self.btn_calibrate = QPushButton("Calibrate")
         self.btn_calibrate.clicked.connect(self.calibrate)
@@ -148,6 +169,7 @@ class CalibrationWindow(QDialog):
         
         controls_layout.addWidget(self.btn_acquire)
         controls_layout.addLayout(acq_time_layout)
+        controls_layout.addLayout(unit_layout) # 追加したユニットレイアウト
         controls_layout.addLayout(find_peaks_layout)
         controls_layout.addLayout(neon_layout)
         controls_layout.addWidget(self.table)
@@ -157,6 +179,10 @@ class CalibrationWindow(QDialog):
         
         main_layout.addLayout(controls_layout, stretch=1)
         
+    def update_table_header(self):
+        unit_str = "nm" if self.radio_unit_wl.isChecked() else "cm⁻¹"
+        self.table.setHorizontalHeaderLabels(["Peak pos. (px)", "Use", f"Value ({unit_str})"])
+
     def update_acq_time(self):
         if self.camera_thread:
             self.camera_thread.update_exposure(self.spin_acq_time.value())
@@ -224,8 +250,8 @@ class CalibrationWindow(QDialog):
             self.table.setCellWidget(row, 1, chk_widget)
             
             self.row_widgets.append({"check": chk, "input": None, "px": center})
-            self.table.removeCellWidget(row, 2)
             
+            # Useボタンがトグルされたら入力ウィジェットを生成する
             chk.stateChanged.connect(lambda state, r=row: self.on_use_toggled(state, r))
             
             line = pg.InfiniteLine(pos=center, angle=90, pen=pg.mkPen('r', style=Qt.PenStyle.DashLine))
@@ -252,10 +278,11 @@ class CalibrationWindow(QDialog):
     def create_value_widget_for_row(self, row):
         if self.radio_neon_yes.isChecked():
             val_widget = QComboBox()
+            # Neon peaks around 694 nm
             val_widget.addItems(["692.94673", "702.40504", "703.24131"])
         else:
             val_widget = CustomDoubleSpinBox()
-            val_widget.setRange(0, 5000)
+            val_widget.setRange(-10000, 20000)
             val_widget.setDecimals(5)
             
         self.table.setCellWidget(row, 2, val_widget)
@@ -281,7 +308,7 @@ class CalibrationWindow(QDialog):
 
     def calibrate(self):
         pixels = []
-        wavelengths = []
+        ref_values = []
         
         for row_data in self.row_widgets:
             if row_data["check"].isChecked() and row_data["input"] is not None:
@@ -294,20 +321,27 @@ class CalibrationWindow(QDialog):
                     wl = input_widget.value()
                     
                 pixels.append(px)
-                wavelengths.append(wl)
+                ref_values.append(wl)
                 
-        coeffs = self.calib_core.calibrate(pixels, wavelengths)
-        if coeffs is not None:
-            self.calib_coeffs = coeffs
-            c0, c1, c2 = coeffs
-            self.lbl_calib_result.setText(f"y = c0 + c1*x + c2*x^2\n"
-                                          f"c0 = {c0:.6e}\n"
-                                          f"c1 = {c1:.6e}\n"
-                                          f"c2 = {c2:.6e}")
+        if len(pixels) < 2:
+            self.calib_coeffs = None
+            self.lbl_calib_result.setText("Please check and provide values\nfor at least 2 peaks.")
+            self.btn_save_apply.setEnabled(False)
+            return
+            
+        coeffs_dict = self.calib_core.calibrate(pixels, ref_values)
+        if coeffs_dict is not None:
+            self.calib_coeffs = (coeffs_dict["c0"], coeffs_dict["c1"], coeffs_dict["c2"])
+            self.lbl_calib_result.setText(
+                f"y = c0 + c1*x + c2*x^2\n"
+                f"c0 = {coeffs_dict['c0']:.6e}\n"
+                f"c1 = {coeffs_dict['c1']:.6e}\n"
+                f"c2 = {coeffs_dict['c2']:.6e}"
+            )
             self.btn_save_apply.setEnabled(True)
         else:
             self.calib_coeffs = None
-            self.lbl_calib_result.setText("Need at least 2 points checked\nfor calibration.")
+            self.lbl_calib_result.setText("Calibration failed.")
             self.btn_save_apply.setEnabled(False)
 
     def save_and_apply(self):
@@ -316,19 +350,20 @@ class CalibrationWindow(QDialog):
             
         main_window = self.parent()
         if main_window is None:
-            QMessageBox.warning(self, "Error", "Cannot access main window settings.")
             return
             
         grating = main_window.combo_grating.currentText()
         center_wl = main_window.spin_centre_wl.value()
         
-        # ★ ファイル名にHHMMを追加 ★
-        date_str = datetime.now().strftime("%Y-%m-%d_%H%M")
-        default_filename = f"calib_grating{grating}_centre{center_wl}nm_{date_str}.json"
+        date_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+        unit_str = "Wavelength" if self.radio_unit_wl.isChecked() else "Raman shift"
+        unit_sym = "nm" if self.radio_unit_wl.isChecked() else "cm-1"
+        
+        default_filename = f"config_grating{grating}_centre{center_wl}{unit_sym}_{date_str}.json"
         
         file_path, _ = QFileDialog.getSaveFileName(
             self, 
-            "Save Calibration Data", 
+            "Save Configuration Data", 
             default_filename, 
             "JSON Files (*.json)"
         )
@@ -352,7 +387,8 @@ class CalibrationWindow(QDialog):
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "spectrometer_settings": {
                 "grating_grooves_per_mm": grating,
-                "center_wavelength_nm": center_wl
+                "center_value": center_wl,
+                "unit": unit_str
             },
             "detector_settings": {
                 "mode": mode,
@@ -369,7 +405,7 @@ class CalibrationWindow(QDialog):
         try:
             with open(file_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=4)
-            QMessageBox.information(self, "Success", f"Calibration data saved successfully to:\n{file_path}")
+            QMessageBox.information(self, "Success", f"Configuration data saved successfully to:\n{file_path}")
             
             main_window.apply_calibration(self.calib_coeffs, os.path.basename(file_path))
             self.accept()

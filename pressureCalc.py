@@ -40,10 +40,8 @@ class PressureCalculator:
                 B = 9.29e-3
                 C = 2.32e-2
                 
-                # 圧力の計算
                 p = A * dlam * (1.0 + B * dlam) / (1.0 + C * dlam)
                 
-                # 誤差の計算（微分 dp/dlam * lam_err）
                 dp_dlam = A * (1.0 + 2.0 * B * dlam + B * C * dlam**2) / ((1.0 + C * dlam)**2)
                 dp = abs(dp_dlam * lam_err)
                 
@@ -53,7 +51,6 @@ class PressureCalculator:
                 return None, None
 
         return None, None
-
 
     @staticmethod
     def correct_lambda0(scale, current_t, t0, lam0_at_t0):
@@ -95,7 +92,6 @@ class PressureCalculator:
             shift_current = datchi_shift(current_t)
             shift_t0 = datchi_shift(t0)
             
-            # 基準温度 t0 と 現在の温度 current_t のシフト量の差分を加算
             return lam0_at_t0 + (shift_current - shift_t0)
 
         return lam0_at_t0

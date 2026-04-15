@@ -46,20 +46,24 @@ class SpectrometerGUI(QMainWindow):
         self.setWindowTitle("Andor Spectrometer Live View" + (" [DEBUG MODE]" if self.debug else ""))
         self.resize(1400, 900)
 
-        # --- センサーのスケールと温度範囲のデータ ---
+        # --- センサーのスケールと温度範囲・ピークタイプのデータ ---
         self.sensor_data = {
             "Ruby": {
                 "scales": ["Piermarini et al. 1975", "Mao et al. hydro 1986", "Shen et al. 2020"],
-                "t_scales": ["Ragan 1992", "Datchi et al. 2007 Linear"]
+                "t_scales": ["Ragan 1992", "Datchi et al. 2007 Liner"],
+                "req_double": True,
+                "lam0_default": 694.2300
             },
             "Sm2+:SrB4O7": {
                 "scales": ["Datchi et al. 1997"],
-                "t_scales": ["Datchi et al. 1997"]
+                "t_scales": ["Datchi et al. 1997"],
+                "req_double": False,
+                "lam0_default": 685.4100
             }
         }
         self.t_scale_limits = {
             "Ragan 1992": (15, 600),
-            "Datchi et al. 2007 Linear": (0, 600),
+            "Datchi et al. 2007 Liner": (0, 600),
             "Datchi et al. 1997": (0, 900)
         }
         # ----------------------------------------
@@ -101,7 +105,8 @@ class SpectrometerGUI(QMainWindow):
         self.analyzer = DataAnalyzer()
 
         # スペクトロメーターの現在の物理的状態を保持する（Apply制御用）
-        self.physical_grating = str(self.config["grating"][0]) if self.config["grating"] else "600"
+        first_grating = self.config.get("grating", [{}])[0].get("grooves", 600)
+        self.physical_grating = str(first_grating)
         self.physical_center_wl = 694.0
 
         central_widget = QWidget()
@@ -304,7 +309,7 @@ class SpectrometerGUI(QMainWindow):
         spec_group = QGroupBox("Spectrometer Configurations")
         spec_layout = QGridLayout()
         
-        self.grating_list = [str(g) for g in self.config["grating"]]
+        self.grating_list = [str(g.get("grooves")) for g in self.config.get("grating", [])]
         self.combo_grating = CustomComboBox()
         self.combo_grating.addItems(self.grating_list)
         
@@ -331,7 +336,7 @@ class SpectrometerGUI(QMainWindow):
         self.btn_apply_spec.setStyleSheet("font-weight: bold; color: #2196F3;")
         
         self.btn_calib_neon = QPushButton("Calibrate x-axis")
-        self.btn_load_calib = QPushButton("Load previous calibration")
+        self.btn_load_calib = QPushButton("Load previous configuration (this moves the grating if necessary!)")
         self.lbl_loaded_calib = QLabel("Loaded: None")
         self.lbl_loaded_calib.setStyleSheet("color: #666; font-size: 11px;")
         
@@ -370,13 +375,11 @@ class SpectrometerGUI(QMainWindow):
         roi_spin_layout.addWidget(QLabel("Start Row:"))
         self.spin_vstart = CustomSpinBox()
         self.spin_vstart.setMaximum(4000) 
-        self.spin_vstart.setValue(self.config["defaultROI"]["from"])
         roi_spin_layout.addWidget(self.spin_vstart)
         
         roi_spin_layout.addWidget(QLabel("End Row:"))
         self.spin_vend = CustomSpinBox()
         self.spin_vend.setMaximum(4000) 
-        self.spin_vend.setValue(self.config["defaultROI"]["to"])
         roi_spin_layout.addWidget(self.spin_vend)
         roi_layout.addLayout(roi_spin_layout)
         roi_group.setLayout(roi_layout)
@@ -458,6 +461,11 @@ class SpectrometerGUI(QMainWindow):
         press_radio_layout.addWidget(self.radio_press_on)
         press_radio_layout.addWidget(self.radio_press_off)
         press_layout.addLayout(press_radio_layout)
+        
+        # フィッティング関数のミスマッチ警告用ラベル
+        self.lbl_press_warning = QLabel("")
+        self.lbl_press_warning.setStyleSheet("color: #f44336; font-weight: bold; font-size: 11px;")
+        press_layout.addWidget(self.lbl_press_warning)
 
         p_top_layout = QGridLayout()
         self.combo_sensor = CustomComboBox()
@@ -551,8 +559,8 @@ class SpectrometerGUI(QMainWindow):
         self.radio_2d.toggled.connect(self.apply_roi_settings)
         self.radio_1d_full.toggled.connect(self.apply_roi_settings)
         self.radio_1d_roi.toggled.connect(self.apply_roi_settings)
-        self.spin_vstart.valueChanged.connect(self.apply_roi_settings)
-        self.spin_vend.valueChanged.connect(self.apply_roi_settings)
+        self.spin_vstart.valueChanged.connect(self.on_roi_spin_changed)
+        self.spin_vend.valueChanged.connect(self.on_roi_spin_changed)
         
         self.btn_acq_bg.clicked.connect(self.on_acq_bg_clicked)
         self.btn_load_bg.clicked.connect(self.on_load_bg_clicked)
@@ -581,9 +589,10 @@ class SpectrometerGUI(QMainWindow):
         self.combo_fit_func.currentTextChanged.connect(self.update_pressure_calc_state)
         
         self.radio_press_on.toggled.connect(self.on_fit_settings_changed)
+        self.radio_press_on.toggled.connect(self.update_pressure_calc_state)
         self.radio_press_off.toggled.connect(self.on_fit_settings_changed)
+        self.radio_press_off.toggled.connect(self.update_pressure_calc_state)
         
-        # センサー選択変更でスケールを更新する
         self.combo_sensor.currentTextChanged.connect(self.on_sensor_changed)
         
         self.combo_press_scale.currentTextChanged.connect(self.on_fit_settings_changed)
@@ -608,22 +617,37 @@ class SpectrometerGUI(QMainWindow):
         self.seq_timer = QTimer(self)
         self.seq_timer.timeout.connect(self.update_seq_progress)
         
-        self.toggle_temp_shift_inputs()
         self.update_pressure_calc_state() 
         self.update_plot_labels()
         
         self.spec_ctrl.initialize()
+        
         current_wl = self.spec_ctrl.get_wavelength()
         self.physical_center_wl = current_wl
         self.spin_centre_wl.setValue(current_wl)
         
         current_grating_idx = self.spec_ctrl.get_grating()
-        if 1 <= current_grating_idx <= len(self.grating_list):
-            self.combo_grating.setCurrentIndex(current_grating_idx - 1)
+        target_cb_idx = 0
+        for i, g in enumerate(self.config.get("grating", [])):
+            if g.get("index") == current_grating_idx:
+                target_cb_idx = i
+                break
+                
+        if 0 <= target_cb_idx < len(self.grating_list):
+            self.combo_grating.setCurrentIndex(target_cb_idx)
         else:
             self.combo_grating.setCurrentIndex(0)
+            
         self.physical_grating = self.combo_grating.currentText()
         self.btn_apply_spec.setEnabled(False)
+        
+        roi_f, roi_t = self.get_roi_for_grating(self.physical_grating)
+        self.spin_vstart.blockSignals(True)
+        self.spin_vend.blockSignals(True)
+        self.spin_vstart.setValue(roi_f)
+        self.spin_vend.setValue(roi_t)
+        self.spin_vstart.blockSignals(False)
+        self.spin_vend.blockSignals(False)
 
         self.centralWidget().setEnabled(False)
         self.init_dialog = QDialog(self)
@@ -644,6 +668,30 @@ class SpectrometerGUI(QMainWindow):
         self.thread.temperature_set_finished.connect(lambda: self.spin_cooler_temp.setEnabled(True))
         
         self.thread.start()
+
+    def get_roi_for_grating(self, grating_str):
+        for g in self.config.get("grating", []):
+            if str(g.get("grooves")) == str(grating_str):
+                r = g.get("defaultROI", {})
+                return r.get("from", 100), r.get("to", 140)
+        return 100, 140
+
+    def save_config_to_file(self):
+        try:
+            with open("spectrometerConfig.json", "w", encoding="utf-8") as f:
+                json.dump(self.config, f, indent=4)
+        except Exception as e:
+            print(f"Failed to save config: {e}")
+
+    def on_roi_spin_changed(self):
+        self.apply_roi_settings()
+        
+        for g in self.config.get("grating", []):
+            if str(g.get("grooves")) == self.physical_grating:
+                g.setdefault("defaultROI", {})["from"] = self.spin_vstart.value()
+                g.setdefault("defaultROI", {})["to"] = self.spin_vend.value()
+                break
+        self.save_config_to_file()
 
     def show_skip_frames_info(self, link):
         dialog = QDialog(self)
@@ -888,7 +936,11 @@ class SpectrometerGUI(QMainWindow):
             fit_start = self.spin_fit_start.value()
             fit_end = self.spin_fit_end.value()
             is_double = "Double" in func
-            calc_press = self.press_group.isEnabled() and self.radio_press_on.isChecked()
+            
+            current_sensor = self.combo_sensor.currentText()
+            req_double = self.sensor_data.get(current_sensor, {}).get("req_double", True)
+            is_match = (is_double == req_double)
+            calc_press = self.press_group.isEnabled() and self.radio_press_on.isChecked() and is_match
             
             try:
                 with open(self.seq_fitting_summary_path, "w", encoding="utf-8") as f:
@@ -978,6 +1030,7 @@ class SpectrometerGUI(QMainWindow):
         data = self.sensor_data.get(sensor, {})
         scales = data.get("scales", [])
         t_scales = data.get("t_scales", [])
+        lam0_default = data.get("lam0_default", 694.2300)
         
         self.combo_press_scale.blockSignals(True)
         self.combo_press_scale.clear()
@@ -988,14 +1041,59 @@ class SpectrometerGUI(QMainWindow):
         self.combo_ts_scale.clear()
         self.combo_ts_scale.addItems(t_scales)
         self.combo_ts_scale.blockSignals(False)
+
+        self.spin_lambda0.blockSignals(True)
+        self.spin_lambda0.setValue(lam0_default)
+        self.spin_lambda0.blockSignals(False)
         
-        self.on_fit_settings_changed()
+        self.spin_lambda0_t0.blockSignals(True)
+        self.spin_lambda0_t0.setValue(lam0_default)
+        self.spin_lambda0_t0.blockSignals(False)
+        
+        self.update_pressure_calc_state()
         self.update_temperature_correction()
 
     def update_pressure_calc_state(self):
         is_fitting_on = self.radio_fit_on.isChecked()
-        is_double = "Double" in self.combo_fit_func.currentText()
-        self.press_group.setEnabled(is_fitting_on and is_double)
+        is_press_on = self.radio_press_on.isChecked()
+        
+        self.press_group.setEnabled(is_fitting_on)
+
+        if not is_fitting_on:
+            self.lbl_press_warning.setText("")
+            return
+
+        is_double_fit = "Double" in self.combo_fit_func.currentText()
+        current_sensor = self.combo_sensor.currentText()
+        req_double = self.sensor_data.get(current_sensor, {}).get("req_double", True)
+
+        is_match = (is_double_fit == req_double)
+
+        if is_press_on:
+            if not is_match:
+                if req_double:
+                    self.lbl_press_warning.setText("Warning: This scale requires a Double peak fitting function.")
+                else:
+                    self.lbl_press_warning.setText("Warning: This scale requires a Single peak fitting function.")
+            else:
+                self.lbl_press_warning.setText("")
+        else:
+            self.lbl_press_warning.setText("")
+
+        controls_enabled = is_press_on and is_match
+
+        self.combo_sensor.setEnabled(is_press_on)
+        self.combo_press_scale.setEnabled(controls_enabled)
+        
+        is_ts_on = self.radio_ts_on.isChecked()
+        self.spin_lambda0.setEnabled(controls_enabled and not is_ts_on)
+        self.btn_set_r1.setEnabled(controls_enabled and not is_ts_on)
+
+        self.radio_ts_on.setEnabled(controls_enabled)
+        self.radio_ts_off.setEnabled(controls_enabled)
+        
+        self.toggle_temp_shift_inputs()
+        
         self.on_fit_settings_changed()
 
     def check_temp_limits(self):
@@ -1023,14 +1121,25 @@ class SpectrometerGUI(QMainWindow):
             self.lbl_temp_warning.setText("")
 
     def toggle_temp_shift_inputs(self):
-        is_on = self.radio_ts_on.isChecked()
-        self.combo_ts_scale.setEnabled(is_on)
-        self.spin_curr_temp_k.setEnabled(is_on)
-        self.spin_t0.setEnabled(is_on)
-        self.spin_lambda0_t0.setEnabled(is_on)
+        is_fitting_on = self.radio_fit_on.isChecked()
+        is_press_on = self.radio_press_on.isChecked()
+        is_double_fit = "Double" in self.combo_fit_func.currentText()
+        current_sensor = self.combo_sensor.currentText()
+        req_double = self.sensor_data.get(current_sensor, {}).get("req_double", True)
+        is_match = (is_double_fit == req_double)
         
-        self.spin_lambda0.setEnabled(not is_on)
-        self.btn_set_r1.setEnabled(not is_on)
+        controls_enabled = is_fitting_on and is_press_on and is_match
+        is_ts_on = self.radio_ts_on.isChecked()
+
+        ts_enabled = controls_enabled and is_ts_on
+
+        self.combo_ts_scale.setEnabled(ts_enabled)
+        self.spin_curr_temp_k.setEnabled(ts_enabled)
+        self.spin_t0.setEnabled(ts_enabled)
+        self.spin_lambda0_t0.setEnabled(ts_enabled)
+        
+        self.spin_lambda0.setEnabled(controls_enabled and not is_ts_on)
+        self.btn_set_r1.setEnabled(controls_enabled and not is_ts_on)
         
         self.update_temperature_correction()
 
@@ -1053,13 +1162,45 @@ class SpectrometerGUI(QMainWindow):
     def load_spectrometer_config(self):
         config_path = "spectrometerConfig.json"
         default_config = {
-            "grating": [600, 1200, 1800],
-            "defaultROI": {"from": 100, "to": 140},
+            "grating": [
+                {
+                    "index": 1,
+                    "grooves": 600,
+                    "defaultROI": {"from": 100, "to": 140}
+                },
+                {
+                    "index": 2,
+                    "grooves": 1200,
+                    "defaultROI": {"from": 100, "to": 140}
+                },
+                {
+                    "index": 3,
+                    "grooves": 1800,
+                    "defaultROI": {"from": 100, "to": 140}
+                }
+            ],
             "flip_x": False
         }
         try:
             with open(config_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
+                
+                if "grating" in data and len(data["grating"]) > 0 and isinstance(data["grating"][0], (int, float)):
+                    new_grating = []
+                    for i, g in enumerate(data["grating"]):
+                        new_grating.append({
+                            "index": i + 1,
+                            "grooves": int(g),
+                            "defaultROI": data.get("defaultROI", {"from": 100, "to": 140})
+                        })
+                    data["grating"] = new_grating
+                    
+                    try:
+                        with open(config_path, "w", encoding="utf-8") as fw:
+                            json.dump(data, fw, indent=4)
+                    except:
+                        pass
+                
                 for key, val in default_config.items():
                     if key not in data:
                         data[key] = val
@@ -1069,11 +1210,7 @@ class SpectrometerGUI(QMainWindow):
 
     def on_flip_x_changed(self):
         self.config["flip_x"] = self.chk_flip_x.isChecked()
-        try:
-            with open("spectrometerConfig.json", "w", encoding="utf-8") as f:
-                json.dump(self.config, f, indent=4)
-        except:
-            pass
+        self.save_config_to_file()
         if getattr(self, 'raw_1d_data', None) is not None and hasattr(self.thread, 'is_measuring') and not self.thread.is_measuring:
             self.update_display(is_new_data=False)
 
@@ -1087,7 +1224,7 @@ class SpectrometerGUI(QMainWindow):
             self.update_display(is_new_data=False)
 
     def on_load_calibration(self):
-        file_path, _ = QFileDialog.getOpenFileName(self, "Load Calibration Data", "", "JSON Files (*.json)")
+        file_path, _ = QFileDialog.getOpenFileName(self, "Load Configuration", "", "JSON Files (*.json)")
         if not file_path:
             return
             
@@ -1095,33 +1232,66 @@ class SpectrometerGUI(QMainWindow):
             with open(file_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
                 
-            calib_grating = str(data.get("spectrometer_settings", {}).get("grating_grooves_per_mm", ""))
-            curr_grating = self.combo_grating.currentText()
+            spec_settings = data.get("spectrometer_settings", {})
+            calib_grating = str(spec_settings.get("grating_grooves_per_mm", "600"))
+            calib_unit = spec_settings.get("unit", "Wavelength")
+            calib_center = spec_settings.get("center_value", 694.0)
             
-            if calib_grating and calib_grating != curr_grating:
-                msgBox = QMessageBox(self)
-                msgBox.setIcon(QMessageBox.Icon.Warning)
-                msgBox.setWindowTitle("Grating Mismatch")
-                msgBox.setText(f"The loaded calibration is for grating {calib_grating} grooves/mm, but current setting is {curr_grating} grooves/mm.\n\nWhat would you like to do?")
+            if "center_wavelength_nm" in spec_settings:
+                calib_center = spec_settings["center_wavelength_nm"]
+                calib_unit = "Wavelength"
                 
-                btn_cont = msgBox.addButton("Continue anyway", QMessageBox.ButtonRole.ActionRole)
-                btn_another = msgBox.addButton("Choose another file", QMessageBox.ButtonRole.ActionRole)
-                msgBox.addButton("Quit", QMessageBox.ButtonRole.RejectRole)
-                
-                msgBox.exec()
-                clicked = msgBox.clickedButton()
-                if clicked == btn_another:
-                    self.on_load_calibration()
-                    return
-                elif clicked != btn_cont:
-                    return
-
+            det_settings = data.get("detector_settings", {})
+            det_mode = det_settings.get("mode", "1D Spectrum (Custom ROI)")
+            roi_start = det_settings.get("roi_start", 100)
+            roi_end = det_settings.get("roi_end", 140)
+            
             c0 = data["calibration_coefficients"]["c0"]
             c1 = data["calibration_coefficients"]["c1"]
             c2 = data["calibration_coefficients"]["c2"]
-            self.apply_calibration((c0, c1, c2), os.path.basename(file_path))
+            
+            if "2D" in det_mode:
+                self.radio_2d.setChecked(True)
+            elif "Full" in det_mode:
+                self.radio_1d_full.setChecked(True)
+            else:
+                self.radio_1d_roi.setChecked(True)
+                
+            self.spin_vstart.blockSignals(True)
+            self.spin_vend.blockSignals(True)
+            self.spin_vstart.setValue(roi_start)
+            self.spin_vend.setValue(roi_end)
+            self.spin_vstart.blockSignals(False)
+            self.spin_vend.blockSignals(False)
+            self.apply_roi_settings()
+            
+            self.radio_spec_mode_raman.blockSignals(True)
+            self.radio_spec_mode_wl.blockSignals(True)
+            if calib_unit == "Raman shift":
+                self.radio_spec_mode_raman.setChecked(True)
+                self.lbl_centre.setText("Centre (cm⁻¹):")
+            else:
+                self.radio_spec_mode_wl.setChecked(True)
+                self.lbl_centre.setText("Centre (nm):")
+            self.radio_spec_mode_raman.blockSignals(False)
+            self.radio_spec_mode_wl.blockSignals(False)
+            
+            cb_idx = self.combo_grating.findText(calib_grating)
+            if cb_idx >= 0:
+                self.combo_grating.setCurrentIndex(cb_idx)
+                
+            self.spin_centre_wl.setValue(calib_center)
+            
+            self._loading_config = True
+            self._pending_calib_coeffs = (c0, c1, c2)
+            self._pending_calib_filename = os.path.basename(file_path)
+            
+            self.on_apply_spectrometer()
+            
         except Exception as e:
-            QMessageBox.warning(self, "Error", f"Failed to load calibration:\n{e}")
+            self._loading_config = False
+            self._pending_calib_coeffs = None
+            QMessageBox.warning(self, "Error", f"Failed to load configuration:\n{e}")
 
     def on_acq_bg_clicked(self):
         self._is_acquiring_bg = True
@@ -1312,7 +1482,12 @@ class SpectrometerGUI(QMainWindow):
                             f"{res.get('Width', 0):.6f}", f"{res.get('Width_Err', 0):.6f}"
                         ]
                         
-                    if 'Pressure' in res:
+                    is_double = "Double" in func
+                    current_sensor = self.combo_sensor.currentText()
+                    req_double = self.sensor_data.get(current_sensor, {}).get("req_double", True)
+                    is_match = (is_double == req_double)
+                    
+                    if 'Pressure' in res and is_match:
                         fit_header += ",Pressure_GPa,Pressure_Err"
                         vals.extend([f"{res.get('Pressure', 0):.6f}", f"{res.get('Pressure_Err', 0):.6f}"])
                         
@@ -1459,10 +1634,26 @@ class SpectrometerGUI(QMainWindow):
             
         self.btn_apply_spec.setEnabled(False)
         
-        self.calib_coeffs = None
-        self.calib_file_name = "None"
-        self.lbl_loaded_calib.setText("Loaded: None")
-        self.update_plot_labels()
+        if getattr(self, '_loading_config', False):
+            if hasattr(self, '_pending_calib_coeffs') and self._pending_calib_coeffs is not None:
+                self.apply_calibration(self._pending_calib_coeffs, self._pending_calib_filename)
+                self._pending_calib_coeffs = None
+                self._pending_calib_filename = None
+            self._loading_config = False
+        else:
+            self.calib_coeffs = None
+            self.calib_file_name = "None"
+            self.lbl_loaded_calib.setText("Loaded: None")
+            self.update_plot_labels()
+            
+            roi_f, roi_t = self.get_roi_for_grating(self.physical_grating)
+            self.spin_vstart.blockSignals(True)
+            self.spin_vend.blockSignals(True)
+            self.spin_vstart.setValue(roi_f)
+            self.spin_vend.setValue(roi_t)
+            self.spin_vstart.blockSignals(False)
+            self.spin_vend.blockSignals(False)
+            self.apply_roi_settings()
         
         if getattr(self, 'raw_1d_data', None) is not None and hasattr(self.thread, 'is_measuring') and not self.thread.is_measuring:
             self.update_display(is_new_data=False)
@@ -1671,7 +1862,16 @@ class SpectrometerGUI(QMainWindow):
 
                     text += f"<b>R-value:</b><br> {res['R2']:.4f}</span>"
                     
-                    if res.get("is_double") and self.press_group.isEnabled() and self.radio_press_on.isChecked():
+                    is_double_fit = res.get("is_double")
+                    current_sensor = self.combo_sensor.currentText()
+                    req_double = self.sensor_data.get(current_sensor, {}).get("req_double", True)
+                    is_match = (is_double_fit == req_double)
+                    
+                    is_press_active = False
+                    if self.press_group.isEnabled() and self.radio_press_on.isChecked() and is_match:
+                        is_press_active = True
+
+                    if is_press_active:
                         sensor = self.combo_sensor.currentText()
                         scale = self.combo_press_scale.currentText()
                         lam0 = self.spin_lambda0.value()
@@ -1741,7 +1941,11 @@ class SpectrometerGUI(QMainWindow):
                     
                     if self.radio_fit_on.isChecked() and getattr(self, 'seq_fitting_summary_path', None):
                         is_double = "Double" in self.combo_fit_func.currentText()
-                        calc_press = self.press_group.isEnabled() and self.radio_press_on.isChecked()
+                        
+                        current_sensor = self.combo_sensor.currentText()
+                        req_double = self.sensor_data.get(current_sensor, {}).get("req_double", True)
+                        is_match = (is_double == req_double)
+                        calc_press = self.press_group.isEnabled() and self.radio_press_on.isChecked() and is_match
                         
                         res = self.latest_fit_res
                         cols = [filename, date_str]
@@ -1837,11 +2041,25 @@ class SpectrometerGUI(QMainWindow):
 
 
 def check_and_create_config():
-    """GUI起動前にspectrometerConfig.jsonの存在を確認し、なければポップアップで作成する"""
     config_path = "spectrometerConfig.json"
     default_config = {
-        "grating": [600, 1200, 1800],
-        "defaultROI": {"from": 100, "to": 140},
+        "grating": [
+            {
+                "index": 1,
+                "grooves": 600,
+                "defaultROI": {"from": 100, "to": 140}
+            },
+            {
+                "index": 2,
+                "grooves": 1200,
+                "defaultROI": {"from": 100, "to": 140}
+            },
+            {
+                "index": 3,
+                "grooves": 1800,
+                "defaultROI": {"from": 100, "to": 140}
+            }
+        ],
         "flip_x": False
     }
     
@@ -1866,7 +2084,14 @@ def check_and_create_config():
                     pass
                     
         if gratings_int:
-            default_config["grating"] = gratings_int
+            new_grating = []
+            for i, g_val in enumerate(gratings_int):
+                new_grating.append({
+                    "index": i + 1,
+                    "grooves": g_val,
+                    "defaultROI": {"from": 100, "to": 140}
+                })
+            default_config["grating"] = new_grating
             
         try:
             with open(config_path, "w", encoding="utf-8") as f:

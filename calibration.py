@@ -23,25 +23,26 @@ class CalibrationCore:
         if noise < 1.0: 
             noise = 1.0
         
-        # UIのスライダーから渡された倍率を使用（デフォルト: 3.5）
         prominence_threshold = noise * prominence_multiplier
         height_threshold = median_y + noise * max(1.0, prominence_multiplier)
-        print(f"Peak find, prominence_multiplier: {prominence_multiplier}")
-        
-        # distance=10 に設定し、10px以内に密集した細かなノイズピークを排除する
-        peaks, _ = find_peaks(y_data, distance=10, prominence=prominence_threshold, height=height_threshold)
-        
+        print(f"Peak find, prominence_multiplier: {prominence_multiplier}, noise: {noise:.2f}, prominence_thresh: {prominence_threshold:.2f}, height_thresh: {height_threshold:.2f}")
+
+        peaks, properties = find_peaks(y_data, prominence=prominence_threshold, height=height_threshold)
+
         fitted_peaks = []
         for p in peaks:
-            # ピーク周辺(±20px)を切り出してガウシアンフィット
-            start = max(0, p - 20)
-            end = min(len(y_data), p + 20)
+            # ピークの周囲数ピクセル（例: ±10ピクセル）を切り出してフィット
+            window = 10
+            start = max(0, p - window)
+            end = min(len(y_data), p + window + 1)
+            
             x_fit = x_data[start:end]
             y_fit = y_data[start:end]
             
-            p_amp = y_data[p] - np.min(y_fit)
+            # 初期推定値: a=ピーク高さ, x0=ピーク位置, sigma=2.0, offset=最小値
+            a_guess = y_data[p] - np.min(y_fit)
             offset_guess = np.min(y_fit)
-            p0 = [p_amp, p, 2.0, offset_guess]
+            p0 = [a_guess, p, 2.0, offset_guess]
             bounds = ([0, min(x_fit), 0.1, -np.inf], [np.inf, max(x_fit), 20, np.inf])
             
             try:
@@ -64,21 +65,27 @@ class CalibrationCore:
                 
         return fitted_peaks
 
-    def calibrate(self, pixels, wavelengths):
-        """ピクセルと波長のリストを受け取り、多項式フィットを行う"""
+    def calibrate(self, pixels, ref_values):
+        """ピクセルと基準値(nm または cm⁻¹)のリストを受け取り、多項式フィットを行う"""
         pixels = np.array(pixels)
-        wavelengths = np.array(wavelengths)
+        ref_values = np.array(ref_values)
         
         if len(pixels) < 2:
             return None
             
         if len(pixels) == 2:
             # 2点の場合は1次関数 (y = c1*x + c0)
-            coeffs = np.polyfit(pixels, wavelengths, 1)
-            # 戻り値を c0, c1, c2 の順に揃える (c2は0)
-            return coeffs[1], coeffs[0], 0.0
+            coeffs = np.polyfit(pixels, ref_values, 1)
+            return {
+                "c0": coeffs[1],
+                "c1": coeffs[0],
+                "c2": 0.0
+            }
         else:
             # 3点以上の場合は2次関数 (y = c2*x^2 + c1*x + c0)
-            coeffs = np.polyfit(pixels, wavelengths, 2)
-            # 戻り値を c0, c1, c2 の順に揃える
-            return coeffs[2], coeffs[1], coeffs[0]
+            coeffs = np.polyfit(pixels, ref_values, 2)
+            return {
+                "c0": coeffs[2],
+                "c1": coeffs[1],
+                "c2": coeffs[0]
+            }
