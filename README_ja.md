@@ -8,6 +8,8 @@ Andor製のカメラ（検出器）および分光器を制御し、スペクト
 
 ![](manuals/img/Screen_ja.jpg)
 
+![](manuals/img/calibration_window.png)
+
 ## ✨ 主な機能 
 
 * **リアルタイム測定・制御**
