@@ -3,37 +3,57 @@ class PressureCalculator:
     def calculate(sensor, scale, lam, lam0, lam_err=0.0):
         """
         ルビー蛍光等の波長から圧力を計算する
-        :param sensor: センサー物質名 (例: "Ruby")
+        :param sensor: センサー物質名 (例: "Ruby", "Sm2+:SrB4O7")
         :param scale: 圧力計算のスケール名
         :param lam: 測定された波長 (nm)
         :param lam0: 常圧での波長 (nm)
         :param lam_err: フィッティングから得られた波長の誤差
         :return: (圧力[GPa], 誤差[GPa]) のタプル。未定義のセンサー・スケールの場合は(None, None)
         """
-        if sensor != "Ruby":
-            return None, None
-            
-        if scale == "Piermarini et al. 1975":
-            p = 2.740 * (lam - lam0)
-            dp = 2.740 * lam_err
-            
-        elif scale == "Mao et al. hydro 1986":
-            A = 1904.0
-            B = 7.665
-            p = (A / B) * ((lam / lam0)**B - 1.0)
-            dp = A * (lam / lam0)**(B - 1.0) * (lam_err / lam0)
-            
-        elif scale == "Shen et al. 2020":
-            A = 1.87 * 10**3
-            B = 5.63
-            lam_ratio = (lam - lam0) / lam0
-            p = A * lam_ratio * (1.0 + B * lam_ratio)
-            dp = abs((A / lam0) * (1.0 + 2.0 * B * lam_ratio) * lam_err)
-            
-        else:
-            return None, None
-            
-        return p, abs(dp)
+        if sensor == "Ruby":
+            if scale == "Piermarini et al. 1975":
+                p = 2.740 * (lam - lam0)
+                dp = 2.740 * lam_err
+                
+            elif scale == "Mao et al. hydro 1986":
+                A = 1904.0
+                B = 7.665
+                p = (A / B) * ((lam / lam0)**B - 1.0)
+                dp = A * (lam / lam0)**(B - 1.0) * (lam_err / lam0)
+                
+            elif scale == "Shen et al. 2020":
+                A = 1.87 * 10**3
+                B = 5.63
+                lam_ratio = (lam - lam0) / lam0
+                p = A * lam_ratio * (1.0 + B * lam_ratio)
+                dp = abs((A / lam0) * (1.0 + 2.0 * B * lam_ratio) * lam_err)
+                
+            else:
+                return None, None
+                
+            return p, abs(dp)
+
+        elif sensor == "Sm2+:SrB4O7":
+            if scale == "Datchi et al. 1997":
+                dlam = lam - lam0
+                A = 4.032
+                B = 9.29e-3
+                C = 2.32e-2
+                
+                # 圧力の計算
+                p = A * dlam * (1.0 + B * dlam) / (1.0 + C * dlam)
+                
+                # 誤差の計算（微分 dp/dlam * lam_err）
+                dp_dlam = A * (1.0 + 2.0 * B * dlam + B * C * dlam**2) / ((1.0 + C * dlam)**2)
+                dp = abs(dp_dlam * lam_err)
+                
+                return p, dp
+                
+            else:
+                return None, None
+
+        return None, None
+
 
     @staticmethod
     def correct_lambda0(scale, current_t, t0, lam0_at_t0):
@@ -57,4 +77,25 @@ class PressureCalculator:
             corrected_lam0 = lam_t - lam_t0 + lam0_at_t0
             return corrected_lam0
             
+        elif scale == "Datchi et al. 2007 Liner":
+            # ルビーの線形補正 (T <= 600 K を想定)
+            return lam0_at_t0 + 7.3e-3 * (current_t - t0)
+            
+        elif scale == "Datchi et al. 1997":
+            # Sm2+:SrB4O7 の温度補正
+            # For T <= 500 K, lambda = lambda0.
+            # For T > 500 K,  lambda = lambda0 + 1.06*10^-4 * (T-500) + 1.5*10^-7 * (T-500)^2
+            def datchi_shift(t):
+                if t <= 500.0:
+                    return 0.0
+                else:
+                    dt = t - 500.0
+                    return 1.06e-4 * dt + 1.5e-7 * (dt**2)
+                    
+            shift_current = datchi_shift(current_t)
+            shift_t0 = datchi_shift(t0)
+            
+            # 基準温度 t0 と 現在の温度 current_t のシフト量の差分を加算
+            return lam0_at_t0 + (shift_current - shift_t0)
+
         return lam0_at_t0
