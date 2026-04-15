@@ -4,7 +4,11 @@ Author: Hiroki Kobayashi (Geochemical Research Center, The University of Tokyo).
 
 Andor製のカメラ（検出器）および分光器を制御し、スペクトルのリアルタイム取得からバックグラウンド補正、キャリブレーション、ピークフィッティング、そして高圧実験における圧力計算までを一貫して行うためのPythonベースのGUIアプリケーションです。
 
-## ✨ 主な機能 (Features)
+## Screenshot
+
+![](manuals/img/Screen_ja.jpg)
+
+## ✨ 主な機能 
 
 * **リアルタイム測定・制御**
   * 1Dスペクトル（Full Range / Custom ROI）および2Dイメージのリアルタイム表示
