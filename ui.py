@@ -258,6 +258,7 @@ class SpectrometerGUI(QMainWindow):
         self.lbl_seq_progress.setVisible(False)
         
         self.btn_start_seq = QPushButton("Start Sequential")
+        self.btn_start_seq.setEnabled(False)
         self.btn_start_seq.setStyleSheet("background-color: #2196F3; color: white; font-weight: bold;")
         self.btn_stop_seq = QPushButton("Stop Sequential")
         self.btn_stop_seq.setEnabled(False)
@@ -707,6 +708,10 @@ class SpectrometerGUI(QMainWindow):
             self.seq_dir = dir_path
             display_path = dir_path if len(dir_path) < 25 else "..." + dir_path[-22:]
             self.lbl_seq_dir.setText(f"Dir: {display_path}")
+        
+        if not self.is_sequential_running:
+                self.btn_start_seq.setEnabled(True)
+                self.btn_start_seq.setStyleSheet("background-color: #2196F3; color: white; font-weight: bold;")
 
     def on_spec_mode_changed(self):
         is_raman = self.radio_spec_mode_raman.isChecked()
@@ -980,35 +985,7 @@ class SpectrometerGUI(QMainWindow):
             "defaultROI": {"from": 100, "to": 140},
             "flip_x": False
         }
-        
-        if not os.path.exists(config_path):
-            text, ok = QInputDialog.getText(
-                self, 
-                "Spectrometer Configuration", 
-                "spectrometerConfig.json not found.\n"
-                "Please enter the gratings (grooves/mm) separated by commas\n"
-                "(e.g., 600, 1200, 1800):"
-            )
-            
-            gratings_int = []
-            if ok and text:
-                gratings_str = [g.strip() for g in text.split(",") if g.strip()]
-                for g in gratings_str:
-                    try:
-                        gratings_int.append(int(g))
-                    except ValueError:
-                        pass
-                        
-            if gratings_int:
-                default_config["grating"] = gratings_int
-                
-            try:
-                with open(config_path, "w", encoding="utf-8") as f:
-                    json.dump(default_config, f, indent=4)
-            except:
-                pass
-            return default_config
-            
+      
         try:
             with open(config_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
@@ -1018,7 +995,6 @@ class SpectrometerGUI(QMainWindow):
                 return data
         except:
             return default_config
-
     def on_flip_x_changed(self):
         self.config["flip_x"] = self.chk_flip_x.isChecked()
         try:
@@ -1788,10 +1764,47 @@ class SpectrometerGUI(QMainWindow):
         self.spec_ctrl.close()
         event.accept()
 
+def check_and_create_config():
+    """GUI起動前にspectrometerConfig.jsonの存在を確認し、なければポップアップで作成する"""
+    config_path = "spectrometerConfig.json"
+    default_config = {
+        "grating": [600, 1200, 1800],
+        "defaultROI": {"from": 100, "to": 140},
+        "flip_x": False
+    }
+    
+    if not os.path.exists(config_path):
+        text, ok = QInputDialog.getText(
+            None, 
+            "Spectrometer Configuration", 
+            "spectrometerConfig.json not found.\nPlease enter the gratings (grooves/mm) separated by commas\n(e.g., 600, 1200, 1800):"
+        )
+        
+        gratings_int = []
+        if ok and text:
+            gratings_str = [g.strip() for g in text.split(",") if g.strip()]
+            for g in gratings_str:
+                try:
+                    gratings_int.append(int(g))
+                except ValueError:
+                    pass
+                    
+        if gratings_int:
+            default_config["grating"] = gratings_int
+            
+        try:
+            with open(config_path, "w", encoding="utf-8") as f:
+                json.dump(default_config, f, indent=4)
+        except Exception as e:
+            QMessageBox.warning(None, "Warning", f"Failed to save config file:\n{e}")
+
 if __name__ == "__main__":
     import sys
     debug_mode = "--debug" in sys.argv
     app = QApplication(sys.argv)
+    
+    check_and_create_config()
+    
     window = SpectrometerGUI(debug=debug_mode)
     window.show()
     sys.exit(app.exec())
