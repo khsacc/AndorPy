@@ -46,6 +46,24 @@ class SpectrometerGUI(QMainWindow):
         self.setWindowTitle("Andor Spectrometer Live View" + (" [DEBUG MODE]" if self.debug else ""))
         self.resize(1400, 900)
 
+        # --- センサーのスケールと温度範囲のデータ ---
+        self.sensor_data = {
+            "Ruby": {
+                "scales": ["Piermarini et al. 1975", "Mao et al. hydro 1986", "Shen et al. 2020"],
+                "t_scales": ["Ragan 1992", "Datchi et al. 2007 Linear"]
+            },
+            "Sm2+:SrB4O7": {
+                "scales": ["Datchi et al. 1997"],
+                "t_scales": ["Datchi et al. 1997"]
+            }
+        }
+        self.t_scale_limits = {
+            "Ragan 1992": (15, 600),
+            "Datchi et al. 2007 Linear": (0, 600),
+            "Datchi et al. 1997": (0, 900)
+        }
+        # ----------------------------------------
+
         self.config = self.load_spectrometer_config()
 
         self.raw_1d_data = None 
@@ -259,7 +277,7 @@ class SpectrometerGUI(QMainWindow):
         
         self.btn_start_seq = QPushButton("Start Sequential")
         self.btn_start_seq.setEnabled(False)
-        self.btn_start_seq.setStyleSheet("background-color: #2196F3; color: white; font-weight: bold;")
+        self.btn_start_seq.setStyleSheet("background-color: #A0A0A0; color: white; font-weight: bold;")
         self.btn_stop_seq = QPushButton("Stop Sequential")
         self.btn_stop_seq.setEnabled(False)
         self.btn_stop_seq.setStyleSheet("background-color: #A0A0A0; color: white; font-weight: bold;")
@@ -443,17 +461,17 @@ class SpectrometerGUI(QMainWindow):
 
         p_top_layout = QGridLayout()
         self.combo_sensor = CustomComboBox()
-        self.combo_sensor.addItem("Ruby")
+        self.combo_sensor.addItems(list(self.sensor_data.keys()))
         
         self.combo_press_scale = CustomComboBox()
-        self.combo_press_scale.addItems(["Piermarini et al. 1975", "Mao et al. hydro 1986", "Shen et al. 2020"])
+        self.combo_press_scale.addItems(self.sensor_data["Ruby"]["scales"])
         self.combo_press_scale.setCurrentText("Shen et al. 2020")
         
         self.spin_lambda0 = CustomDoubleSpinBox()
         self.spin_lambda0.setRange(0, 2000)
         self.spin_lambda0.setDecimals(4)
         self.spin_lambda0.setValue(694.2300)
-        self.btn_set_r1 = QPushButton("Set current R1 as λ0")
+        self.btn_set_r1 = QPushButton("Set current as λ0")
         self.btn_set_r1.clicked.connect(self.on_set_r1_clicked)
         
         p_top_layout.addWidget(QLabel("Sensor:"), 0, 0)
@@ -474,11 +492,17 @@ class SpectrometerGUI(QMainWindow):
         ts_radio_layout.addWidget(self.radio_ts_on)
         ts_radio_layout.addWidget(self.radio_ts_off)
         self.combo_ts_scale = CustomComboBox()
-        self.combo_ts_scale.addItem("Ragan 1992")
+        self.combo_ts_scale.addItems(self.sensor_data["Ruby"]["t_scales"])
         
+        temp_input_layout = QHBoxLayout()
         self.spin_curr_temp_k = CustomDoubleSpinBox()
         self.spin_curr_temp_k.setRange(0, 5000)
         self.spin_curr_temp_k.setValue(300.0) 
+        self.lbl_temp_warning = QLabel("")
+        self.lbl_temp_warning.setStyleSheet("color: #f44336; font-weight: bold; font-size: 11px;")
+        temp_input_layout.addWidget(self.spin_curr_temp_k)
+        temp_input_layout.addWidget(self.lbl_temp_warning)
+        temp_input_layout.addStretch()
         
         self.spin_t0 = CustomDoubleSpinBox()
         self.spin_t0.setRange(0, 5000)
@@ -494,7 +518,7 @@ class SpectrometerGUI(QMainWindow):
         ts_layout.addWidget(QLabel("Scale:"), 1, 0)
         ts_layout.addWidget(self.combo_ts_scale, 1, 1)
         ts_layout.addWidget(QLabel("Current temp (K):"), 2, 0)
-        ts_layout.addWidget(self.spin_curr_temp_k, 2, 1)
+        ts_layout.addLayout(temp_input_layout, 2, 1)
         ts_layout.addWidget(QLabel("T0 (K):"), 3, 0)
         ts_layout.addWidget(self.spin_t0, 3, 1)
         ts_layout.addWidget(QLabel("λ0 at T0 (nm):"), 4, 0)
@@ -558,7 +582,10 @@ class SpectrometerGUI(QMainWindow):
         
         self.radio_press_on.toggled.connect(self.on_fit_settings_changed)
         self.radio_press_off.toggled.connect(self.on_fit_settings_changed)
-        self.combo_sensor.currentTextChanged.connect(self.on_fit_settings_changed)
+        
+        # センサー選択変更でスケールを更新する
+        self.combo_sensor.currentTextChanged.connect(self.on_sensor_changed)
+        
         self.combo_press_scale.currentTextChanged.connect(self.on_fit_settings_changed)
         self.spin_lambda0.valueChanged.connect(self.on_fit_settings_changed)
 
@@ -577,6 +604,9 @@ class SpectrometerGUI(QMainWindow):
         self.btn_apply_spec.clicked.connect(self.on_apply_spectrometer)
         self.btn_calib_neon.clicked.connect(self.on_calibrate_neon)
         self.btn_load_calib.clicked.connect(self.on_load_calibration) 
+        
+        self.seq_timer = QTimer(self)
+        self.seq_timer.timeout.connect(self.update_seq_progress)
         
         self.toggle_temp_shift_inputs()
         self.update_pressure_calc_state() 
@@ -708,8 +738,7 @@ class SpectrometerGUI(QMainWindow):
             self.seq_dir = dir_path
             display_path = dir_path if len(dir_path) < 25 else "..." + dir_path[-22:]
             self.lbl_seq_dir.setText(f"Dir: {display_path}")
-        
-        if not self.is_sequential_running:
+            if not self.is_sequential_running:
                 self.btn_start_seq.setEnabled(True)
                 self.btn_start_seq.setStyleSheet("background-color: #2196F3; color: white; font-weight: bold;")
 
@@ -809,7 +838,7 @@ class SpectrometerGUI(QMainWindow):
         msgBox = QMessageBox(self)
         msgBox.setIcon(QMessageBox.Icon.Warning)
         msgBox.setWindowTitle("Background Mismatch")
-        msgBox.setText("Current measurement settings (Exposure time, Accumulations, or ROI) do not match the loaded background.\n\nPlease close the shutter and acquire a new background, or ignore to continue.")
+        msgBox.setText("Current measurement settings do not match the loaded background.\nPlease close the shutter and acquire a new background, or ignore to continue.")
         
         btn_ignore = msgBox.addButton("Ignore and continue", QMessageBox.ButtonRole.ActionRole)
         msgBox.addButton("Quit", QMessageBox.ButtonRole.RejectRole)
@@ -902,7 +931,7 @@ class SpectrometerGUI(QMainWindow):
                 seq_end_time_dt = datetime.now()
                 summary_path = os.path.join(self.seq_dir, f"seq_summary_{self.seq_start_time_dt.strftime('%Y%m%d_%H%M%S')}.txt")
                 try:
-                    with open(summary_path, "w", encoding="utf-8") as f:
+                    with open(summary_path, "w", encoding="utf-8", newline="") as f:
                         f.write(f"Sequential Measurement Summary\n")
                         f.write(f"Start Time: {self.seq_start_time_dt.strftime('%Y-%m-%d %H:%M:%S')}\n")
                         f.write(f"End Time: {seq_end_time_dt.strftime('%Y-%m-%d %H:%M:%S')}\n")
@@ -945,11 +974,53 @@ class SpectrometerGUI(QMainWindow):
         self.seq_content.setVisible(checked)
         self.seq_toggle_btn.setText("▼ Sequential measurements" if checked else "▶ Sequential measurements")
 
+    def on_sensor_changed(self, sensor):
+        data = self.sensor_data.get(sensor, {})
+        scales = data.get("scales", [])
+        t_scales = data.get("t_scales", [])
+        
+        self.combo_press_scale.blockSignals(True)
+        self.combo_press_scale.clear()
+        self.combo_press_scale.addItems(scales)
+        self.combo_press_scale.blockSignals(False)
+        
+        self.combo_ts_scale.blockSignals(True)
+        self.combo_ts_scale.clear()
+        self.combo_ts_scale.addItems(t_scales)
+        self.combo_ts_scale.blockSignals(False)
+        
+        self.on_fit_settings_changed()
+        self.update_temperature_correction()
+
     def update_pressure_calc_state(self):
         is_fitting_on = self.radio_fit_on.isChecked()
         is_double = "Double" in self.combo_fit_func.currentText()
         self.press_group.setEnabled(is_fitting_on and is_double)
         self.on_fit_settings_changed()
+
+    def check_temp_limits(self):
+        if not self.radio_ts_on.isChecked():
+            self.lbl_temp_warning.setText("")
+            return
+            
+        t_scale = self.combo_ts_scale.currentText()
+        curr_t = self.spin_curr_temp_k.value()
+        limits = self.t_scale_limits.get(t_scale)
+        
+        if limits:
+            min_t, max_t = limits
+            warnings = []
+            if min_t is not None and curr_t < min_t:
+                warnings.append(f"< {min_t}K")
+            if max_t is not None and curr_t > max_t:
+                warnings.append(f"> {max_t}K")
+                
+            if warnings:
+                self.lbl_temp_warning.setText(f"Out of range ({', '.join(warnings)})")
+            else:
+                self.lbl_temp_warning.setText("")
+        else:
+            self.lbl_temp_warning.setText("")
 
     def toggle_temp_shift_inputs(self):
         is_on = self.radio_ts_on.isChecked()
@@ -964,6 +1035,7 @@ class SpectrometerGUI(QMainWindow):
         self.update_temperature_correction()
 
     def update_temperature_correction(self):
+        self.check_temp_limits()
         if self.radio_ts_on.isChecked():
             scale = self.combo_ts_scale.currentText()
             curr_t = self.spin_curr_temp_k.value()
@@ -985,7 +1057,6 @@ class SpectrometerGUI(QMainWindow):
             "defaultROI": {"from": 100, "to": 140},
             "flip_x": False
         }
-      
         try:
             with open(config_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
@@ -995,6 +1066,7 @@ class SpectrometerGUI(QMainWindow):
                 return data
         except:
             return default_config
+
     def on_flip_x_changed(self):
         self.config["flip_x"] = self.chk_flip_x.isChecked()
         try:
@@ -1387,7 +1459,6 @@ class SpectrometerGUI(QMainWindow):
             
         self.btn_apply_spec.setEnabled(False)
         
-        # Applyで動かした場合、古いCalibrationを破棄
         self.calib_coeffs = None
         self.calib_file_name = "None"
         self.lbl_loaded_calib.setText("Loaded: None")
@@ -1764,6 +1835,7 @@ class SpectrometerGUI(QMainWindow):
         self.spec_ctrl.close()
         event.accept()
 
+
 def check_and_create_config():
     """GUI起動前にspectrometerConfig.jsonの存在を確認し、なければポップアップで作成する"""
     config_path = "spectrometerConfig.json"
@@ -1774,6 +1846,10 @@ def check_and_create_config():
     }
     
     if not os.path.exists(config_path):
+        app_temp = QApplication.instance()
+        if not app_temp:
+            app_temp = QApplication(sys.argv)
+            
         text, ok = QInputDialog.getText(
             None, 
             "Spectrometer Configuration", 
@@ -1798,12 +1874,14 @@ def check_and_create_config():
         except Exception as e:
             QMessageBox.warning(None, "Warning", f"Failed to save config file:\n{e}")
 
+
 if __name__ == "__main__":
-    import sys
-    debug_mode = "--debug" in sys.argv
-    app = QApplication(sys.argv)
-    
     check_and_create_config()
+    
+    debug_mode = "--debug" in sys.argv
+    app = QApplication.instance()
+    if not app:
+        app = QApplication(sys.argv)
     
     window = SpectrometerGUI(debug=debug_mode)
     window.show()
