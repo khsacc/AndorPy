@@ -308,6 +308,20 @@ class SpectrometerGUI(QMainWindow):
         # ----------------------------------------------------
         spec_group = QGroupBox("Spectrometer Configurations")
         spec_layout = QGridLayout()
+
+        self.btn_load_calib = QPushButton("Load previous configuration")
+        self.btn_load_calib.setStyleSheet("""
+            background-color: #673AB7; 
+            color: white; 
+            font-weight: bold; 
+        """)
+        self.lbl_notes_calib_loading = QLabel('Loading a configuration will change the grating, centre, ROI, and pixel-wavelength calibration.')
+        self.lbl_notes_calib_loading.setStyleSheet("font-style: italic;")
+        self.lbl_notes_calib_loading.setWordWrap(True) # テキストの折り返しを有効にしてレイアウト崩れを防ぐ
+        
+        self.lbl_loaded_calib = QLabel("Loaded: None")
+        self.lbl_loaded_calib.setStyleSheet("color: #333; font-size: 12px; font-weight: bold; margin-bottom: 10px;")
+        self.lbl_loaded_calib.setWordWrap(True)
         
         self.grating_list = [str(g.get("grooves")) for g in self.config.get("grating", [])]
         self.combo_grating = CustomComboBox()
@@ -336,21 +350,21 @@ class SpectrometerGUI(QMainWindow):
         self.btn_apply_spec.setStyleSheet("font-weight: bold; color: #2196F3;")
         
         self.btn_calib_neon = QPushButton("Calibrate x-axis")
-        self.btn_load_calib = QPushButton("Load previous configuration (this moves the grating if necessary!)")
-        self.lbl_loaded_calib = QLabel("Loaded: None")
-        self.lbl_loaded_calib.setStyleSheet("color: #666; font-size: 11px;")
         
-        spec_layout.addWidget(QLabel("Grating (grooves/mm):"), 0, 0)
-        spec_layout.addWidget(self.combo_grating, 0, 1)
-        spec_layout.addLayout(spec_radio_layout, 1, 0, 1, 2)
-        spec_layout.addWidget(self.lbl_centre, 2, 0)
-        spec_layout.addWidget(self.spin_centre_wl, 2, 1)
-        spec_layout.addWidget(self.lbl_exc_wl, 3, 0)
-        spec_layout.addWidget(self.spin_exc_wl, 3, 1)
-        spec_layout.addWidget(self.btn_apply_spec, 4, 0, 1, 2)
-        spec_layout.addWidget(self.btn_calib_neon, 5, 0, 1, 2)
-        spec_layout.addWidget(self.btn_load_calib, 6, 0, 1, 2)
-        spec_layout.addWidget(self.lbl_loaded_calib, 7, 0, 1, 2)
+        spec_layout.addWidget(self.btn_load_calib, 0, 0, 1, 2)
+        spec_layout.addWidget(self.lbl_notes_calib_loading, 1, 0, 1, 2)
+        spec_layout.addWidget(self.lbl_loaded_calib, 2, 0, 1, 2)
+        
+        spec_layout.addWidget(QLabel("Grating (grooves/mm):"), 3, 0)
+        spec_layout.addWidget(self.combo_grating, 3, 1)
+        spec_layout.addLayout(spec_radio_layout, 4, 0, 1, 2)
+        spec_layout.addWidget(self.lbl_centre, 5, 0)
+        spec_layout.addWidget(self.spin_centre_wl, 5, 1)
+        spec_layout.addWidget(self.lbl_exc_wl, 6, 0)
+        spec_layout.addWidget(self.spin_exc_wl, 6, 1)
+        spec_layout.addWidget(self.btn_apply_spec, 7, 0, 1, 2)
+        spec_layout.addWidget(self.btn_calib_neon, 8, 0, 1, 2)
+        
         spec_group.setLayout(spec_layout)
         controls_layout.addWidget(spec_group)
 

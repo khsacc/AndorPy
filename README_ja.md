@@ -78,7 +78,96 @@ Andor製のカメラ（検出器）および分光器を制御し、スペクト
 * 「Fitting Configurations」を **ON** にすると、表示されているスペクトルに対してリアルタイムでフィッティングが行われます。
 * ダブルピークでフィッティングが成功している場合、「Pressure Calculation」セクションを **ON** にすることで、ルビーのR1ピークから圧力を自動計算して表示させることができます。
 
-## 📁 ファイル構成 (File Structure)
+## 📁 保存されるファイル
+
+### データファイル
+
+#### Background を差し引かない場合
+
+```
+# Date: 2026-04-15 20:22:03
+# Grating: 1200 grooves/mm
+# Spectrometer Mode: Wavelength
+# Center Wavelength: 694.0 nm
+# Acquisition Time: 0.1 s
+# Accumulations: 1
+# Wavelength_or_Pixel,Intensity
+673.63,1122
+673.65,1130
+673.671,1126
+673.691,1126
+673.712,1125
+673.732,1132
+673.753,1128
+...
+```
+
+#### Background を差し引く場合
+```
+# Date: 2026-04-15 21:05:42
+# Grating: 1200 grooves/mm
+# Spectrometer Mode: Wavelength
+# Center Wavelength: 694.0 nm
+# Acquisition Time: 2.0 s
+# Accumulations: 1
+# Wavelength_or_Pixel,Intensity_Subtracted,Intensity_Raw,Background
+673.341,2,1031,1029
+673.362,3,1035,1032
+673.383,3,1031,1028
+673.404,-7,1029,1036
+673.425,-1,1032,1033
+673.446,5,1036,1031
+673.467,0,1030,1030
+673.488,-2,1032,1034
+673.508,1,1031,1030
+673.529,-3,1029,1032
+...
+```
+
+### Background file
+```json
+{
+    "detector_settings": {
+        "mode": "1D Spectrum (Custom ROI)",
+        "roi_start": 100,
+        "roi_end": 140
+    },
+    "acquisition_time": "1.00",
+    "signal": [
+        1085,
+        1089,
+        1088,
+        1090, ...
+    ]
+}
+```
+
+### Configuration file
+```json
+{
+    "timestamp": "2026-04-15 21:01:52",
+    "spectrometer_settings": {
+        "grating_grooves_per_mm": "1200",
+        "center_value": 694.0,
+        "unit": "Wavelength"
+    },
+    "detector_settings": {
+        "mode": "1D Spectrum (Custom ROI)",
+        "roi_start": 113,
+        "roi_end": 125
+    },
+    "calibration_coefficients": {
+        "c0": 673.3405851432854,
+        "c1": 0.020990883361968825,
+        "c2": -2.889725985123467e-07
+    }
+}
+```
+
+
+
+
+## 📁 ファイル構成
 
 * ui.py: メインのGUIアプリケーションスクリプト。
 * camera.py: Andorカメラを制御し、データや温度を取得するスレッドクラス。
@@ -87,6 +176,33 @@ Andor製のカメラ（検出器）および分光器を制御し、スペクト
 * calibration_ui.py: ピクセルから波長へのキャリブレーションを行うためのUI。
 * pressureCalc.py: ルビー蛍光から圧力を算出するモジュール。
 * spectrometerConfig.json: 回折格子の設定等を保存する設定ファイル（初回起動時に生成）。
+
+#### spectrometerConfig.json 
+
+ほぼ変えることがないと思われるため、UIから変更する仕様にはなっていない。必要があれば手動で変更する。
+
+```json
+{
+    "grating": [
+        {
+            "index": 1,
+            "grooves": 2400,
+            "defaultROI": {"from": 80, "to": 100}
+        },
+        {
+            "index": 2,
+            "grooves": 1800,
+            "defaultROI": {"from": 115, "to": 130}
+        },
+        {
+            "index": 3,
+            "grooves": 1200,
+            "defaultROI": {"from": 113, "to": 125}
+        }
+    ],
+    "flip_x": true
+}
+```
 
 # 謝辞
 このプログラムは私が作成したものですが、機能やデザインに関する多くのアイデアは、私がStefan Klotz氏との共同研究のためにフランス・パリ・ソルボンヌ大学-CNRS UMR 7590 IMPMCに滞在した際によく使用していた、[Rubycond](https://github.com/CelluleProjet/Rubycond)プログラムから着想されたものです。Rubycondの開発者であるYiuri Garino (yiuri.garino (at) cnrs.fr)氏に感謝申し上げます。またこのプログラムは東京大学大学院理学系研究科附属地殻科学実験施設 鍵裕之

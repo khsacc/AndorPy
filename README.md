@@ -1,3 +1,5 @@
+Caution: This program is under active development!
+
 # Andor Spectrometer Control & Analysis GUI
 
 Author: Hiroki Kobayashi (Geochemical Research Center, The University of Tokyo). https://orcid.org/0000-0002-3682-7558 E-mail as of 2026: hiroki (at) eqchem.s.u-tokyo.ac.jp
