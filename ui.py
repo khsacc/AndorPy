@@ -233,7 +233,7 @@ class SpectrometerGUI(QMainWindow):
         
         self.spin_cooler_temp = CustomSpinBox()
         self.spin_cooler_temp.setRange(-100, 20)
-        self.spin_cooler_temp.setValue(-60)
+        self.spin_cooler_temp.setValue(-65)
         self.btn_read_temp = QPushButton("Read current temperature")
         self.label_current_temp = QLabel("-- °C")
         self.label_current_temp.setStyleSheet("font-weight: bold; color: #E91E63;")
@@ -1432,22 +1432,45 @@ class SpectrometerGUI(QMainWindow):
             acq_time = self.spin_acq_time.value()
             accum = self.spin_accumulate.value()
             
-            header = f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
-            header += f"Spectrometer Model: {spec_model}\n"
-            header += f"Camera Model: {cam_model}\n"
+            header = f"Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
             header += f"Grating: {grating} grooves/mm\n"
             
             if self.radio_spec_mode_raman.isChecked():
                 ex_wl = self.spin_exc_wl.value()
                 header += f"Spectrometer Mode: Raman shift\n"
                 header += f"Excitation Wavelength: {ex_wl} nm\n"
-                header += f"Center Wavelength: {center_wl} cm-1\n"
+                header += f"Centre Raman shift: {center_wl} cm-1\n"
             else:
                 header += f"Spectrometer Mode: Wavelength\n"
-                header += f"Center Wavelength: {center_wl} nm\n"
+                header += f"Centre Wavelength: {center_wl} nm\n"
                 
             header += f"Acquisition Time: {acq_time} s\n"
             header += f"Accumulations: {accum}\n"
+
+            if self.calib_coeffs is not None:
+                c0, c1, c2 = self.calib_coeffs
+                header += f"Calibration Coefficients (c0, c1, c2: y = c0 + c1x + c2x^2): {c0}, {c1}, {c2}\n"
+            else:
+                header += f"Calibration Coefficients: None\n"
+
+            header += f"ROI Start (Vertical Pixel): {self.spin_vstart.value()}\n"
+            header += f"ROI End (Vertical Pixel): {self.spin_vend.value()}\n"
+
+            mode = "2D" if self.radio_2d.isChecked() else "1D (Full)" if self.radio_1d_full.isChecked() else "1D (ROI)"
+            header += f"Measurement Mode: {mode}\n"
+
+            # try:
+            #     # camera_threadに現在温度を返すメソッドやプロパティがある場合
+            #     if hasattr(self.camera_thread, 'current_temperature'):
+            #         temp = self.camera_thread.current_temperature
+            #         header += f"Detector Temperature: {temp} C\n"
+            #     elif hasattr(self.camera_thread, 'get_temperature'):
+            #         temp = self.camera_thread.get_temperature()
+            #         header += f"Detector Temperature: {temp} C\n"
+            #     else:
+            #         header += f"Detector Temperature: N/A\n"
+            # except Exception:
+            #     header += f"Detector Temperature: Error\n"
             
             if is_1d:
                 x_data = self.get_x_axis(len(self.latest_1d_data))
@@ -2053,6 +2076,8 @@ class SpectrometerGUI(QMainWindow):
         self.spec_ctrl.close()
         event.accept()
 
+def print_software_and_author_info(): 
+    print("\nAndor Spectrometer Control & Analysis\nHiroki Kobayashi (University of Tokyo), 2026\nhttps://github.com/khsacc/AndorPy\n")
 
 def check_and_create_config():
     config_path = "spectrometerConfig.json"
@@ -2115,6 +2140,7 @@ def check_and_create_config():
 
 
 if __name__ == "__main__":
+    print_software_and_author_info()
     check_and_create_config()
     
     debug_mode = "--debug" in sys.argv

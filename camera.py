@@ -37,7 +37,7 @@ class CameraThread(QThread):
         
         # デバッグ用の仮想設定値
         self.mock_exposure = 0.1
-        self.mock_temp = -60.0
+        self.mock_temp = -65
 
     def run(self):
         try:
@@ -51,7 +51,7 @@ class CameraThread(QThread):
                 self.cam = Andor.AndorSDK2Camera()
                 self.det_width, self.det_height = self.cam.get_detector_size()
                 print(f"Connected to Andor camera. Detector size: {self.det_width}x{self.det_height}")
-                self.cam.set_temperature(-60)
+                self.cam.set_temperature(-65)
                 self.cam.set_cooler(True)
                 self.cam.set_exposure(0.1) 
                 self.init_finished.emit()
@@ -168,6 +168,46 @@ class CameraThread(QThread):
         self.roi_vstart = vstart
         self.roi_vend = vend
         self.settings_changed = True
+    
+    def get_temperature(self):
+        """現在の目標温度（または最後に取得した温度）を返す"""
+        return self.mock_temp if self.debug else (self.new_temperature if self.new_temperature is not None else -60.0)
+
+    @property
+    def camera(self):
+        """calibration_ui から self.camera_thread.camera.acquire_single_image() と呼ばれるためのプロキシ"""
+        return self
+
+    def acquire_single_image(self, acq_time=None):
+        """Calibration UI等のために、スレッドをブロックして1枚だけ同期的に撮影する（疑似処理）"""
+        if acq_time is not None:
+            self.update_exposure(acq_time)
+            time.sleep(0.1) # 露光設定の反映待ち
+
+        if self.debug:
+            x = np.arange(self.det_width)
+            y1 = 500 * np.exp(-((x - 700)**2) / (2 * 4**2))
+            y2 = 250 * np.exp(-((x - 675)**2) / (2 * 4**2))
+            base = 100 + np.random.normal(0, 10, self.det_width)
+            spectrum = y1 + y2 + base
+            
+            if self.roi_mode == "2d":
+                return np.tile(spectrum, (self.det_height, 1))
+            else:
+                return spectrum
+        else:
+            if self.cam is None: return None
+            
+            if self.settings_changed:
+                self._apply_camera_settings()
+                self.settings_changed = False
+                
+            try:
+                data = self.cam.snap()
+                return data
+            except Exception as e:
+                print(f"Failed to acquire single image: {e}")
+                return None
 
     def start_measuring(self):
         self.is_measuring = True
