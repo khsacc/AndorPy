@@ -6,18 +6,19 @@ import matplotlib.pyplot as plt
 from scipy.signal import find_peaks
 from scipy.optimize import curve_fit
 
+# Peak detection constants - modify these values if needed
+DEFAULT_PROMINENCE_RATIO = 0.01  # 1% of max intensity
+DEFAULT_HEIGHT_RATIO = 0.02      # 2% of max intensity
+DEFAULT_DISTANCE = 5            # Minimum pixels between peaks
+
 def gaussian(x, amp, cen, wid, off):
-    """Gaussian function for peak fitting."""
     return amp * np.exp(-(x - cen)**2 / (2 * wid**2)) + off
 
 def fit_peak(x, y, peak_idx, window=10):
-    """Perform gaussian fitting to find sub-pixel peak center."""
     start = max(0, peak_idx - window)
     end = min(len(x), peak_idx + window)
     x_sub = x[start:end]
     y_sub = y[start:end]
-    
-    # Initial guess: [amplitude, center, width, offset]
     p0 = [np.max(y_sub) - np.min(y_sub), x[peak_idx], 1.0, np.min(y_sub)]
     try:
         popt, _ = curve_fit(gaussian, x_sub, y_sub, p0=p0)
@@ -32,11 +33,12 @@ def main():
 
     input_file = sys.argv[1]
     
-    # 1. User Input for Metadata
-    material_name = input("Enter Reference Material Name (e.g., HgAr): ").strip()
-    wave_range = input("Enter Approximate Wavelength Range (e.g., 400-900nm): ").strip()
+    # User Input for Metadata
+    material_name = input("Enter Reference Material Name: ").strip()
+    wave_range = input("Enter Approximate Wavelength Range: ").strip()
+    ref_url = input("Enter Reference URL (Optional): ").strip()
 
-    # 2. Data Loading
+    # Data Loading
     pixels = []
     counts = []
     try:
@@ -49,15 +51,20 @@ def main():
                     pixels.append(float(parts[0]))
                     counts.append(float(parts[1]))
     except Exception as e:
-        print(f"Error reading file: {e}")
+        print(f"Error: {e}")
         return
 
     pixels = np.array(pixels)
     counts = np.array(counts)
+    max_val = np.max(counts)
 
-    # 3. Peak Detection and Fitting
-    # Adjust prominence based on your noise level
-    peak_indices, _ = find_peaks(counts, prominence=np.max(counts)*0.05)
+    # Automatic Peak Detection
+    peak_indices, _ = find_peaks(
+        counts, 
+        prominence = max_val * DEFAULT_PROMINENCE_RATIO, 
+        height = max_val * DEFAULT_HEIGHT_RATIO,
+        distance = DEFAULT_DISTANCE 
+    )
     
     fitted_pixels = []
     for idx in peak_indices:
@@ -65,86 +72,106 @@ def main():
         fitted_pixels.append(precise_pixel)
     
     fitted_pixels = np.array(fitted_pixels)
-
-    # 4. Interactive Peak Selection
-    print("\n--- Peak Selection Mode ---")
-    print("Check the plot window and map peak IDs to literature values.")
+    print(f"\nFound {len(fitted_pixels)} peaks using pre-defined thresholds.")
     
-    plt.ion() # Interaction ON
-    fig, ax = plt.subplots(figsize=(10, 6))
-    ax.plot(pixels, counts, label='Raw Data', color='gray', alpha=0.7)
-    
+    # Interaction Setup
+    plt.ion()
+    fig, ax = plt.subplots(figsize=(12, 6))
+    ax.plot(pixels, counts, label='Raw Data', color='black', lw=0.8)
     for i, p in enumerate(fitted_pixels):
-        ax.axvline(p, color='red', linestyle='--', alpha=0.5)
-        ax.text(p, np.max(counts), str(i), color='red', fontsize=12, fontweight='bold', ha='center')
-    
-    ax.set_title(f"Spectrum: {material_name}")
+        ax.axvline(p, color='red', linestyle='--', alpha=0.3)
+        ax.text(p, counts[int(p)] if int(p) < len(counts) else max_val, str(i), 
+                color='blue', fontsize=10, fontweight='bold', ha='center')
+    ax.set_title(f"Peak Identification: {material_name}")
     ax.set_xlabel("Pixel")
     ax.set_ylabel("Intensity")
+    plt.grid(True, alpha=0.3)
     plt.show()
 
     selected_pixel_coords = []
     lit_wavelengths = []
 
     while True:
-        user_input = input("Enter [Peak ID, Lit Wavelength] (e.g., 1, 435.83) or 'q' to finish: ")
+        user_input = input("\nEnter [Peak ID, Lit Wavelength] (or 'q' to finish): ")
+        
         if user_input.lower() == 'q':
             if len(selected_pixel_coords) < 3:
-                print("Error: Need at least 3 points for quadratic fitting.")
+                print(f"Current points: {len(selected_pixel_coords)}")
+                print("Error: At least 3 points are required for quadratic fitting.")
+                confirm = input("Do you want to (c)ontinue input or (a)bort? [c/a]: ").lower()
+                if confirm == 'a':
+                    print("Aborted.")
+                    return
                 continue
-            break
+            else:
+                confirm = input(f"Proceed with {len(selected_pixel_coords)} points? [y/n]: ").lower()
+                if confirm == 'y':
+                    break
+                continue
         
         try:
             idx_str, wave_str = user_input.split(',')
             idx = int(idx_str)
             wave = float(wave_str)
-            
             if 0 <= idx < len(fitted_pixels):
                 selected_pixel_coords.append(fitted_pixels[idx])
                 lit_wavelengths.append(wave)
-                print(f"Added: Pixel {fitted_pixels[idx]:.2f} -> {wave} nm")
+                print(f"Added: {fitted_pixels[idx]:.2f} pix -> {wave} nm")
             else:
-                print("Invalid Index.")
-        except ValueError:
-            print("Invalid format. Please use 'ID, Wavelength'.")
+                print("Index out of range.")
+        except:
+            print("Invalid format. Use 'ID, Wavelength'.")
 
-    # 5. Calibration (2nd order polynomial fit)
+    # Calibration Calculation
     coeffs = np.polyfit(selected_pixel_coords, lit_wavelengths, 2)
     poly_func = np.poly1d(coeffs)
-    
     calibrated_wavelengths = poly_func(pixels)
-    calibrated_peak_positions = poly_func(np.array(selected_pixel_coords))
 
-    # 6. JSON Export
+    # JSON Export
     output_data = {
         "material": material_name,
         "approximate_range": wave_range,
+        "reference_url": ref_url,
         "spectrum": {
             "wavelength": calibrated_wavelengths.tolist(),
             "intensity": counts.tolist()
         },
         "reference_peaks": [
-            {"calibrated": float(c), "literature": float(l)} 
-            for c, l in zip(calibrated_peak_positions, lit_wavelengths)
+            {"calibrated": float(poly_func(p)), "literature": float(l)} 
+            for p, l in zip(selected_pixel_coords, lit_wavelengths)
         ]
     }
 
-    output_filename = f"{material_name}_{wave_range}_reference.json".replace(" ", "_").replace("/", "-")
+    output_filename = f"{material_name}_{wave_range}_reference.json".replace(" ", "_")
     with open(output_filename, 'w') as f:
         json.dump(output_data, f, indent=4)
 
-    print(f"\nCalibration complete. File saved as: {output_filename}")
+    print(f"\nSaved: {output_filename}")
     
-    # Final Verification Plot
+    # Final Visualization
     plt.ioff()
-    plt.close()
-    plt.figure(figsize=(10, 6))
-    plt.plot(calibrated_wavelengths, counts)
-    plt.scatter(lit_wavelengths, [np.max(counts)]*len(lit_wavelengths), color='red', marker='v', label='Ref Peaks')
-    plt.title("Calibrated Spectrum")
-    plt.xlabel("Wavelength (nm)")
-    plt.ylabel("Intensity")
-    plt.legend()
+    plt.close('all')
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 10))
+    plt.subplots_adjust(hspace=0.3)
+
+    # Plot 1: Calibrated Spectrum
+    ax1.plot(calibrated_wavelengths, counts, color='black', lw=1)
+    ax1.scatter(lit_wavelengths, [max_val]*len(lit_wavelengths), color='red', marker='v', label='Lit. Peaks')
+    ax1.set_title("Calibrated Spectrum")
+    ax1.set_xlabel("Wavelength (nm)")
+    ax1.set_ylabel("Intensity")
+    ax1.grid(True, alpha=0.3)
+
+    # Plot 2: Calibration Curve
+    pix_range = np.linspace(min(pixels), max(pixels), 100)
+    ax2.plot(pix_range, poly_func(pix_range), color='blue', label='Fit')
+    ax2.scatter(selected_pixel_coords, lit_wavelengths, color='red', label='Selected')
+    ax2.set_title("Calibration Curve (Pixel vs Wavelength)")
+    ax2.set_xlabel("Pixel Index")
+    ax2.set_ylabel("Wavelength (nm)")
+    ax2.legend()
+    ax2.grid(True, alpha=0.3)
+
     plt.show()
 
 if __name__ == "__main__":

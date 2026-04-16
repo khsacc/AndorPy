@@ -11,6 +11,7 @@ from PyQt6.QtCore import Qt
 import pyqtgraph as pg
 
 from calibration import CalibrationCore
+from calibration_helper import ReferenceHelperWindow  # 追加
 
 class CustomDoubleSpinBox(QDoubleSpinBox):
     def __init__(self, *args, **kwargs):
@@ -141,6 +142,16 @@ class CalibrationWindow(QDialog):
         find_peaks_layout.addWidget(self.btn_find_peaks)
         find_peaks_layout.addLayout(slider_layout)
 
+        helper_layout = QHBoxLayout()
+        helper_layout.addWidget(QLabel("Reference data as a guide:"))
+        self.combo_reference = QComboBox()
+        helper_layout.addWidget(self.combo_reference)
+        self.btn_show_helper = QPushButton("Show")
+        self.btn_show_helper.clicked.connect(self.show_reference_helper)
+        helper_layout.addWidget(self.btn_show_helper)
+        
+        self.load_reference_files()
+
         neon_layout = QHBoxLayout()
         neon_layout.addWidget(QLabel("Import neon peaks around 694 nm:"))
         self.radio_neon_yes = QRadioButton("Yes")
@@ -169,8 +180,9 @@ class CalibrationWindow(QDialog):
         
         controls_layout.addWidget(self.btn_acquire)
         controls_layout.addLayout(acq_time_layout)
-        controls_layout.addLayout(unit_layout) # 追加したユニットレイアウト
+        controls_layout.addLayout(unit_layout) 
         controls_layout.addLayout(find_peaks_layout)
+        controls_layout.addLayout(helper_layout)
         controls_layout.addLayout(neon_layout)
         controls_layout.addWidget(self.table)
         controls_layout.addWidget(self.btn_calibrate)
@@ -178,7 +190,57 @@ class CalibrationWindow(QDialog):
         controls_layout.addWidget(self.btn_save_apply)
         
         main_layout.addLayout(controls_layout, stretch=1)
-        
+
+    # --- 追加: Jsonファイルのロードとプルダウン設定 ---
+    def load_reference_files(self):
+        subdir = "calibrationHelper"
+        if not os.path.exists(subdir):
+            return
+            
+        file_list = []
+        for filename in os.listdir(subdir):
+            if filename.endswith(".json"):
+                path = os.path.join(subdir, filename)
+                try:
+                    with open(path, 'r', encoding='utf-8') as f:
+                        data = json.load(f)
+                        material = data.get("material", "Unknown")
+                        approx_range = data.get("approximate_range", "0")
+                        label = f"{material} around {approx_range} nm"
+                        file_list.append({
+                            "label": label,
+                            "range": float(approx_range) if approx_range.replace('.','',1).isdigit() else 0.0,
+                            "data": data
+                        })
+                except Exception as e:
+                    print(f"Error loading {filename}: {e}")
+
+        # approximate_range の大きい順に並べる
+        file_list.sort(key=lambda x: x["range"], reverse=True)
+
+        for item in file_list:
+            self.combo_reference.addItem(item["label"], item["data"])
+
+    def show_reference_helper(self):
+        json_data = self.combo_reference.currentData()
+        if not json_data:
+            QMessageBox.warning(self, "Warning", "No guidance data selected.")
+            return
+
+        # main UIの設定を確認し、Raman shiftモードかどうかとレーザー波長を取得
+        is_raman = False
+        laser_wl = 532.0
+        main_window = self.parent()
+        if main_window:
+            if hasattr(main_window, 'radio_spec_mode_raman') and main_window.radio_spec_mode_raman.isChecked():
+                is_raman = True
+            if hasattr(main_window, 'spin_exc_wl'):
+                laser_wl = main_window.spin_exc_wl.value()
+
+        self.guide_window = ReferenceHelperWindow(json_data, is_raman, laser_wl, self)
+        self.guide_window.show()
+    # -----------------------------------------------
+
     def update_table_header(self):
         unit_str = "nm" if self.radio_unit_wl.isChecked() else "cm⁻¹"
         self.table.setHorizontalHeaderLabels(["Peak pos. (px)", "Use", f"Value ({unit_str})"])
@@ -197,7 +259,7 @@ class CalibrationWindow(QDialog):
             
     def on_data_ready(self, mode, data):
         if self.is_acquiring and mode == "1d":
-            if self.parent() and self.parent().chk_flip_x.isChecked():
+            if self.parent() and hasattr(self.parent(), 'chk_flip_x') and self.parent().chk_flip_x.isChecked():
                 data = data[::-1]
                 
             self.current_spectrum = data
@@ -352,8 +414,8 @@ class CalibrationWindow(QDialog):
         if main_window is None:
             return
             
-        grating = main_window.combo_grating.currentText()
-        center_wl = main_window.spin_centre_wl.value()
+        grating = main_window.combo_grating.currentText() if hasattr(main_window, 'combo_grating') else "Unknown"
+        center_wl = main_window.spin_centre_wl.value() if hasattr(main_window, 'spin_centre_wl') else 0.0
         
         date_str = datetime.now().strftime("%Y%m%d_%H%M%S")
         unit_str = "Wavelength" if self.radio_unit_wl.isChecked() else "Raman shift"
@@ -371,15 +433,14 @@ class CalibrationWindow(QDialog):
         if not file_path:
             return
         
-        if main_window.radio_2d.isChecked():
+        mode = "1D Spectrum (Custom ROI)"
+        if hasattr(main_window, 'radio_2d') and main_window.radio_2d.isChecked():
             mode = "2D Image View"
-        elif main_window.radio_1d_full.isChecked():
+        elif hasattr(main_window, 'radio_1d_full') and main_window.radio_1d_full.isChecked():
             mode = "1D Spectrum (Full Range Binning)"
-        else:
-            mode = "1D Spectrum (Custom ROI)"
             
-        roi_start = main_window.spin_vstart.value()
-        roi_end = main_window.spin_vend.value()
+        roi_start = main_window.spin_vstart.value() if hasattr(main_window, 'spin_vstart') else 0
+        roi_end = main_window.spin_vend.value() if hasattr(main_window, 'spin_vend') else 0
         
         c0, c1, c2 = self.calib_coeffs
         
@@ -407,7 +468,8 @@ class CalibrationWindow(QDialog):
                 json.dump(data, f, indent=4)
             QMessageBox.information(self, "Success", f"Configuration data saved successfully to:\n{file_path}")
             
-            main_window.apply_calibration(self.calib_coeffs, os.path.basename(file_path))
+            if hasattr(main_window, 'apply_calibration'):
+                main_window.apply_calibration(self.calib_coeffs, os.path.basename(file_path))
             self.accept()
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to save file:\n{e}")
