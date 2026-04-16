@@ -6,12 +6,13 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QPushButton,
                              QLabel, QTableWidget, QTableWidgetItem,
                              QCheckBox, QComboBox, QHeaderView, QWidget, 
                              QAbstractSpinBox, QDoubleSpinBox, QSplitter,
-                             QScrollArea, QRadioButton, QFileDialog, QMessageBox, QSlider)
+                             QScrollArea, QRadioButton, QFileDialog, QMessageBox, QSlider,
+                             QListView) # QListView を追加
 from PyQt6.QtCore import Qt
 import pyqtgraph as pg
 
 from calibration import CalibrationCore
-from calibration_helper import ReferenceHelperWindow  # 追加
+from calibration_helper import ReferenceHelperWindow
 
 class CustomDoubleSpinBox(QDoubleSpinBox):
     def __init__(self, *args, **kwargs):
@@ -56,20 +57,23 @@ class CalibrationWindow(QDialog):
         
         self.init_ui()
         
-        # Main UIの設定から初期単位を合わせる
         main_window = self.parent()
-        if main_window and main_window.radio_spec_mode_raman.isChecked():
+        if main_window and hasattr(main_window, 'radio_spec_mode_raman') and main_window.radio_spec_mode_raman.isChecked():
             self.radio_unit_raman.setChecked(True)
         else:
             self.radio_unit_wl.setChecked(True)
+        
         self.update_table_header()
         
         if self.camera_thread:
             self.camera_thread.data_ready.connect(self.on_data_ready)
 
+    def nm_to_raman(self, wl_nm, laser_wl):
+        if wl_nm == 0: return 0.0
+        return (1e7 / laser_wl) - (1e7 / wl_nm)
+
     def init_ui(self):
         main_layout = QHBoxLayout(self)
-        
         plot_splitter = QSplitter(Qt.Orientation.Vertical)
         
         self.plot_widget = pg.PlotWidget()
@@ -111,18 +115,18 @@ class CalibrationWindow(QDialog):
         self.spin_acq_time.editingFinished.connect(self.update_acq_time)
         acq_time_layout.addWidget(self.spin_acq_time)
 
-        # --- Unit Selection (Wavelength vs Raman Shift) ---
         unit_layout = QHBoxLayout()
         self.radio_unit_wl = QRadioButton("Wavelength (nm)")
         self.radio_unit_raman = QRadioButton("Raman shift (cm⁻¹)")
         self.radio_unit_wl.setChecked(True)
-        self.radio_unit_wl.toggled.connect(self.update_table_header)
-        self.radio_unit_raman.toggled.connect(self.update_table_header)
+        
+        self.radio_unit_wl.toggled.connect(self.update_ui_units)
+        self.radio_unit_raman.toggled.connect(self.update_ui_units)
+        
         unit_layout.addWidget(QLabel("Calibration Unit:"))
         unit_layout.addWidget(self.radio_unit_wl)
         unit_layout.addWidget(self.radio_unit_raman)
         unit_layout.addStretch()
-        # ------------------------------------------------
         
         find_peaks_layout = QHBoxLayout()
         self.btn_find_peaks = QPushButton("Find peaks")
@@ -134,8 +138,6 @@ class CalibrationWindow(QDialog):
         self.slider_threshold = QSlider(Qt.Orientation.Horizontal)
         self.slider_threshold.setRange(10, 100) 
         self.slider_threshold.setValue(75)
-        self.slider_threshold.setToolTip("Adjust peak finding threshold")
-        
         slider_layout.addWidget(slider_label)
         slider_layout.addWidget(self.slider_threshold)
         
@@ -143,8 +145,19 @@ class CalibrationWindow(QDialog):
         find_peaks_layout.addLayout(slider_layout)
 
         helper_layout = QHBoxLayout()
-        helper_layout.addWidget(QLabel("Reference data as a guide:"))
+        helper_layout.addWidget(QLabel("Reference data:"))
+        
+        # --- 修正箇所: QComboBox の表示改善 ---
         self.combo_reference = QComboBox()
+        # 1. ドロップダウンリスト内でテキストを折り返す設定
+        view = QListView()
+        view.setWordWrap(True)
+        self.combo_reference.setView(view)
+        # 2. ボックス自体の幅を内容（選択テキスト）に合わせて自動調整
+        self.combo_reference.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
+        self.combo_reference.setMinimumWidth(150)
+        # ------------------------------------
+        
         helper_layout.addWidget(self.combo_reference)
         self.btn_show_helper = QPushButton("Show")
         self.btn_show_helper.clicked.connect(self.show_reference_helper)
@@ -165,7 +178,6 @@ class CalibrationWindow(QDialog):
         self.table = QTableWidget(0, 3)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.table.setAlternatingRowColors(True)
-        self.update_table_header()
         
         self.btn_calibrate = QPushButton("Calibrate")
         self.btn_calibrate.clicked.connect(self.calibrate)
@@ -191,12 +203,24 @@ class CalibrationWindow(QDialog):
         
         main_layout.addLayout(controls_layout, stretch=1)
 
-    # --- 追加: Jsonファイルのロードとプルダウン設定 ---
+    def update_ui_units(self):
+        self.update_table_header()
+        self.load_reference_files()
+
     def load_reference_files(self):
         subdir = "calibrationHelper"
         if not os.path.exists(subdir):
             return
             
+        current_idx = self.combo_reference.currentIndex()
+        self.combo_reference.clear()
+        
+        is_raman = self.radio_unit_raman.isChecked()
+        laser_wl = 532.0
+        main_window = self.parent()
+        if main_window and hasattr(main_window, 'spin_exc_wl'):
+            laser_wl = main_window.spin_exc_wl.value()
+
         file_list = []
         for filename in os.listdir(subdir):
             if filename.endswith(".json"):
@@ -205,21 +229,30 @@ class CalibrationWindow(QDialog):
                     with open(path, 'r', encoding='utf-8') as f:
                         data = json.load(f)
                         material = data.get("material", "Unknown")
-                        approx_range = data.get("approximate_range", "0")
-                        label = f"{material} around {approx_range} nm"
+                        approx_nm_str = data.get("approximate_range", "0")
+                        approx_nm = float(approx_nm_str) if approx_nm_str.replace('.','',1).isdigit() else 0.0
+                        
+                        if is_raman:
+                            approx_raman = self.nm_to_raman(approx_nm, laser_wl)
+                            label = f"{material} around {approx_raman:.1f} cm-1"
+                        else:
+                            label = f"{material} around {approx_nm_str} nm"
+                            
                         file_list.append({
                             "label": label,
-                            "range": float(approx_range) if approx_range.replace('.','',1).isdigit() else 0.0,
+                            "range_nm": approx_nm,
                             "data": data
                         })
                 except Exception as e:
                     print(f"Error loading {filename}: {e}")
 
-        # approximate_range の大きい順に並べる
-        file_list.sort(key=lambda x: x["range"], reverse=True)
+        file_list.sort(key=lambda x: x["range_nm"], reverse=True)
 
         for item in file_list:
             self.combo_reference.addItem(item["label"], item["data"])
+        
+        if current_idx >= 0 and current_idx < self.combo_reference.count():
+            self.combo_reference.setCurrentIndex(current_idx)
 
     def show_reference_helper(self):
         json_data = self.combo_reference.currentData()
@@ -227,19 +260,14 @@ class CalibrationWindow(QDialog):
             QMessageBox.warning(self, "Warning", "No guidance data selected.")
             return
 
-        # main UIの設定を確認し、Raman shiftモードかどうかとレーザー波長を取得
-        is_raman = False
+        is_raman = self.radio_unit_raman.isChecked()
         laser_wl = 532.0
         main_window = self.parent()
-        if main_window:
-            if hasattr(main_window, 'radio_spec_mode_raman') and main_window.radio_spec_mode_raman.isChecked():
-                is_raman = True
-            if hasattr(main_window, 'spin_exc_wl'):
-                laser_wl = main_window.spin_exc_wl.value()
+        if main_window and hasattr(main_window, 'spin_exc_wl'):
+            laser_wl = main_window.spin_exc_wl.value()
 
         self.guide_window = ReferenceHelperWindow(json_data, is_raman, laser_wl, self)
         self.guide_window.show()
-    # -----------------------------------------------
 
     def update_table_header(self):
         unit_str = "nm" if self.radio_unit_wl.isChecked() else "cm⁻¹"
@@ -261,61 +289,45 @@ class CalibrationWindow(QDialog):
         if self.is_acquiring and mode == "1d":
             if self.parent() and hasattr(self.parent(), 'chk_flip_x') and self.parent().chk_flip_x.isChecked():
                 data = data[::-1]
-                
             self.current_spectrum = data
             self.plot_scatter.setData(data)
             self.camera_thread.stop_measuring()
             self.is_acquiring = False
             self.btn_acquire.setEnabled(True)
             self.btn_acquire.setText("Acquire a spectrum")
-            
             self.find_peaks()
             
     def find_peaks(self):
         if self.current_spectrum is None:
             return
-            
         threshold_mult = self.slider_threshold.value() / 10.0
         fitted_peaks = self.calib_core.find_and_fit_peaks(self.current_spectrum, prominence_multiplier=threshold_mult)
-        
         self.table.setRowCount(0)
         self.row_widgets.clear()
-        
         for item in self.peak_lines + self.peak_texts:
             self.plot_widget.removeItem(item)
         self.peak_lines.clear()
         self.peak_texts.clear()
-        
         while self.bottom_layout.count():
             child = self.bottom_layout.takeAt(0)
-            if child.widget():
-                child.widget().deleteLater()
-        
+            if child.widget(): child.widget().deleteLater()
         max_y = np.max(self.current_spectrum)
-        
         for i, p_data in enumerate(fitted_peaks):
             center = p_data["center"]
             row = self.table.rowCount()
             self.table.insertRow(row)
-            
             pos_item = QTableWidgetItem(f"{center:.2f}")
             pos_item.setFlags(pos_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             self.table.setItem(row, 0, pos_item)
-            
             chk = QCheckBox()
-            chk.setChecked(False) 
             chk_widget = QWidget()
             chk_layout = QHBoxLayout(chk_widget)
             chk_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
             chk_layout.setContentsMargins(0, 0, 0, 0)
             chk_layout.addWidget(chk)
             self.table.setCellWidget(row, 1, chk_widget)
-            
             self.row_widgets.append({"check": chk, "input": None, "px": center})
-            
-            # Useボタンがトグルされたら入力ウィジェットを生成する
             chk.stateChanged.connect(lambda state, r=row: self.on_use_toggled(state, r))
-            
             line = pg.InfiniteLine(pos=center, angle=90, pen=pg.mkPen('r', style=Qt.PenStyle.DashLine))
             text = pg.TextItem(f"#{i+1}", color='r', anchor=(0, 1))
             text.setPos(center, max_y * 0.95)
@@ -323,153 +335,79 @@ class CalibrationWindow(QDialog):
             self.plot_widget.addItem(text)
             self.peak_lines.append(line)
             self.peak_texts.append(text)
-            
             small_plot = pg.PlotWidget()
-            small_plot.setTitle(f"Peak #{i+1}", color='k')
-            small_plot.setBackground('w')
-            small_plot.getAxis('bottom').setPen('k')
-            small_plot.getAxis('left').setPen('k')
             small_plot.setFixedSize(180, 180)
+            small_plot.setBackground('w')
             small_plot.plot(p_data["x_fit"], p_data["y_data"], pen=None, symbol='o', symbolSize=3, symbolBrush='b')
             small_plot.plot(p_data["x_fit"], p_data["y_curve"], pen=pg.mkPen('r', width=2))
-            
             self.bottom_layout.addWidget(small_plot)
-            
         self.bottom_layout.addStretch()
 
     def create_value_widget_for_row(self, row):
         if self.radio_neon_yes.isChecked():
             val_widget = QComboBox()
-            # Neon peaks around 694 nm
             val_widget.addItems(["692.94673", "702.40504", "703.24131"])
         else:
             val_widget = CustomDoubleSpinBox()
             val_widget.setRange(-10000, 20000)
             val_widget.setDecimals(5)
-            
         self.table.setCellWidget(row, 2, val_widget)
         if row < len(self.row_widgets):
             self.row_widgets[row]["input"] = val_widget
 
     def on_use_toggled(self, state, row):
-        is_checked = (state == Qt.CheckState.Checked.value)
-        if is_checked:
+        if state == Qt.CheckState.Checked.value:
             self.create_value_widget_for_row(row)
         else:
             self.table.removeCellWidget(row, 2)
-            if row < len(self.row_widgets):
-                self.row_widgets[row]["input"] = None
+            if row < len(self.row_widgets): self.row_widgets[row]["input"] = None
 
     def update_table_value_widgets(self):
         for row in range(self.table.rowCount()):
             chk_widget = self.table.cellWidget(row, 1)
             if chk_widget:
                 chk = chk_widget.layout().itemAt(0).widget()
-                if chk.isChecked():
-                    self.create_value_widget_for_row(row)
+                if chk.isChecked(): self.create_value_widget_for_row(row)
 
     def calibrate(self):
-        pixels = []
-        ref_values = []
-        
+        pixels, ref_values = [], []
         for row_data in self.row_widgets:
             if row_data["check"].isChecked() and row_data["input"] is not None:
                 px = row_data["px"]
                 input_widget = row_data["input"]
-                
-                if isinstance(input_widget, QComboBox):
-                    wl = float(input_widget.currentText())
-                else:
-                    wl = input_widget.value()
-                    
+                wl = float(input_widget.currentText()) if isinstance(input_widget, QComboBox) else input_widget.value()
                 pixels.append(px)
                 ref_values.append(wl)
-                
         if len(pixels) < 2:
-            self.calib_coeffs = None
-            self.lbl_calib_result.setText("Please check and provide values\nfor at least 2 peaks.")
+            self.lbl_calib_result.setText("Please check at least 2 peaks.")
             self.btn_save_apply.setEnabled(False)
             return
-            
-        coeffs_dict = self.calib_core.calibrate(pixels, ref_values)
-        if coeffs_dict is not None:
-            self.calib_coeffs = (coeffs_dict["c0"], coeffs_dict["c1"], coeffs_dict["c2"])
-            self.lbl_calib_result.setText(
-                f"y = c0 + c1*x + c2*x^2\n"
-                f"c0 = {coeffs_dict['c0']:.6e}\n"
-                f"c1 = {coeffs_dict['c1']:.6e}\n"
-                f"c2 = {coeffs_dict['c2']:.6e}"
-            )
+        coeffs = self.calib_core.calibrate(pixels, ref_values)
+        if coeffs:
+            self.calib_coeffs = (coeffs["c0"], coeffs["c1"], coeffs["c2"])
+            self.lbl_calib_result.setText(f"y = c0 + c1*x + c2*x^2\nc0 = {coeffs['c0']:.6e}\nc1 = {coeffs['c1']:.6e}\nc2 = {coeffs['c2']:.6e}")
             self.btn_save_apply.setEnabled(True)
-        else:
-            self.calib_coeffs = None
-            self.lbl_calib_result.setText("Calibration failed.")
-            self.btn_save_apply.setEnabled(False)
 
     def save_and_apply(self):
-        if self.calib_coeffs is None:
-            return
-            
+        if self.calib_coeffs is None: return
         main_window = self.parent()
-        if main_window is None:
-            return
-            
+        if main_window is None: return
         grating = main_window.combo_grating.currentText() if hasattr(main_window, 'combo_grating') else "Unknown"
         center_wl = main_window.spin_centre_wl.value() if hasattr(main_window, 'spin_centre_wl') else 0.0
-        
         date_str = datetime.now().strftime("%Y%m%d_%H%M%S")
-        unit_str = "Wavelength" if self.radio_unit_wl.isChecked() else "Raman shift"
         unit_sym = "nm" if self.radio_unit_wl.isChecked() else "cm-1"
-        
-        default_filename = f"config_grating{grating}_centre{center_wl}{unit_sym}_{date_str}.json"
-        
-        file_path, _ = QFileDialog.getSaveFileName(
-            self, 
-            "Save Configuration Data", 
-            default_filename, 
-            "JSON Files (*.json)"
-        )
-        
-        if not file_path:
-            return
-        
-        mode = "1D Spectrum (Custom ROI)"
-        if hasattr(main_window, 'radio_2d') and main_window.radio_2d.isChecked():
-            mode = "2D Image View"
-        elif hasattr(main_window, 'radio_1d_full') and main_window.radio_1d_full.isChecked():
-            mode = "1D Spectrum (Full Range Binning)"
-            
-        roi_start = main_window.spin_vstart.value() if hasattr(main_window, 'spin_vstart') else 0
-        roi_end = main_window.spin_vend.value() if hasattr(main_window, 'spin_vend') else 0
-        
+        file_path, _ = QFileDialog.getSaveFileName(self, "Save Config", f"config_{grating}_{center_wl}{unit_sym}_{date_str}.json", "JSON (*.json)")
+        if not file_path: return
         c0, c1, c2 = self.calib_coeffs
-        
         data = {
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "spectrometer_settings": {
-                "grating_grooves_per_mm": grating,
-                "center_value": center_wl,
-                "unit": unit_str
-            },
-            "detector_settings": {
-                "mode": mode,
-                "roi_start": roi_start,
-                "roi_end": roi_end
-            },
-            "calibration_coefficients": {
-                "c0": c0,
-                "c1": c1,
-                "c2": c2
-            }
+            "calibration_coefficients": {"c0": c0, "c1": c1, "c2": c2}
         }
-        
         try:
             with open(file_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=4)
-            QMessageBox.information(self, "Success", f"Configuration data saved successfully to:\n{file_path}")
-            
             if hasattr(main_window, 'apply_calibration'):
                 main_window.apply_calibration(self.calib_coeffs, os.path.basename(file_path))
             self.accept()
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to save file:\n{e}")
+            QMessageBox.critical(self, "Error", str(e))

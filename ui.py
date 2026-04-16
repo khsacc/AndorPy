@@ -2077,7 +2077,12 @@ class SpectrometerGUI(QMainWindow):
         event.accept()
 
 def print_software_and_author_info(): 
-    print("\nAndor Spectrometer Control & Analysis\nHiroki Kobayashi (University of Tokyo), 2026\nhttps://github.com/khsacc/AndorPy\n")
+    print(
+        "\n====================\n====================\n"\
+        "Andor Spectrometer Control & Analysis\nHiroki Kobayashi (The University of Tokyo), 2026\n"\
+        "https://github.com/khsacc/AndorPy\n"\
+        "====================\n====================\n"
+    )
 
 def check_and_create_config():
     config_path = "spectrometerConfig.json"
