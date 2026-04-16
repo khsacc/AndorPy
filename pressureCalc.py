@@ -2,13 +2,13 @@ class PressureCalculator:
     @staticmethod
     def calculate(sensor, scale, lam, lam0, lam_err=0.0):
         """
-        ルビー蛍光等の波長から圧力を計算する
-        :param sensor: センサー物質名 (例: "Ruby", "Sm2+:SrB4O7")
-        :param scale: 圧力計算のスケール名
-        :param lam: 測定された波長 (nm)
-        :param lam0: 常圧での波長 (nm)
-        :param lam_err: フィッティングから得られた波長の誤差
-        :return: (圧力[GPa], 誤差[GPa]) のタプル。未定義のセンサー・スケールの場合は(None, None)
+        Calculate pressure using an optical pressure sensor
+        :param sensor: sensor material (e.g., "Ruby", "Sm2+:SrB4O7")
+        :param scale: scale for the pressure calculation
+        :param lam: measured peak wavelength (nm)
+        :param lam0: zero-pressure peak wavelength (nm)
+        :param lam_err: error from fitting
+        :return: (pressure [GPa], error [GPa])。If either the sensor or the scale is undefined, the return will be(None, None)
         """
         if sensor == "Ruby":
             if scale == "Piermarini et al. 1975":
@@ -74,7 +74,7 @@ class PressureCalculator:
             corrected_lam0 = lam_t - lam_t0 + lam0_at_t0
             return corrected_lam0
             
-        elif scale == "Datchi et al. 2007 Liner":
+        elif scale == "Datchi et al. 2007 Linear":
             # ルビーの線形補正 (T <= 600 K を想定)
             return lam0_at_t0 + 7.3e-3 * (current_t - t0)
             

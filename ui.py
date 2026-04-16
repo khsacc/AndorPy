@@ -50,7 +50,7 @@ class SpectrometerGUI(QMainWindow):
         self.sensor_data = {
             "Ruby": {
                 "scales": ["Piermarini et al. 1975", "Mao et al. hydro 1986", "Shen et al. 2020"],
-                "t_scales": ["Ragan 1992", "Datchi et al. 2007 Liner"],
+                "t_scales": ["Ragan 1992", "Datchi et al. 2007 Linear"],
                 "req_double": True,
                 "lam0_default": 694.2300
             },
@@ -63,8 +63,8 @@ class SpectrometerGUI(QMainWindow):
         }
         self.t_scale_limits = {
             "Ragan 1992": (15, 600),
-            "Datchi et al. 2007 Liner": (0, 600),
-            "Datchi et al. 1997": (0, 900)
+            "Datchi et al. 2007 Linear": (300, 600),
+            "Datchi et al. 1997": (300, 900)
         }
         # ----------------------------------------
 
