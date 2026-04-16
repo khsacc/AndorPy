@@ -19,6 +19,7 @@ from spectrometer import SpectrometerController, SpectrometerMoveThread
 from analysis import DataAnalyzer
 from calibration_ui import CalibrationWindow
 from pressureCalc import PressureCalculator
+from pressureCalc_ui import PressureCalculatorWindow
 # ----------------------------------------
 
 class CustomSpinBox(QSpinBox):
@@ -46,7 +47,6 @@ class SpectrometerGUI(QMainWindow):
         self.setWindowTitle("Andor Spectrometer Live View" + (" [DEBUG MODE]" if self.debug else ""))
         self.resize(1400, 900)
 
-        # --- センサーのスケールと温度範囲・ピークタイプのデータ ---
         self.sensor_data = {
             "Ruby": {
                 "scales": ["Piermarini et al. 1975", "Mao et al. hydro 1986", "Shen et al. 2020"],
@@ -66,7 +66,6 @@ class SpectrometerGUI(QMainWindow):
             "Datchi et al. 2007 Linear": (300, 600),
             "Datchi et al. 1997": (300, 900)
         }
-        # ----------------------------------------
 
         self.config = self.load_spectrometer_config()
 
@@ -87,11 +86,9 @@ class SpectrometerGUI(QMainWindow):
         self.latest_fit_res = None
         self.latest_fit_func = None
 
-        # Accumulation用変数
         self.current_accum_count = 0
         self.accumulated_data = None
 
-        # シーケンシャル測定用変数
         self.seq_dir = ""
         self.is_sequential_running = False
         self.seq_count = 0
@@ -104,18 +101,16 @@ class SpectrometerGUI(QMainWindow):
         self.spec_ctrl = SpectrometerController(debug=self.debug)
         self.analyzer = DataAnalyzer()
 
-        # スペクトロメーターの現在の物理的状態を保持する（Apply制御用）
         first_grating = self.config.get("grating", [{}])[0].get("grooves", 600)
         self.physical_grating = str(first_grating)
         self.physical_center_wl = 694.0
+
+        self.pressure_window = None
 
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         main_layout = QHBoxLayout(central_widget)
 
-        # ==========================================
-        # LEFT PANEL (Plotting Area)
-        # ==========================================
         plot_layout = QVBoxLayout()
         
         status_coord_layout = QHBoxLayout()
@@ -182,9 +177,6 @@ class SpectrometerGUI(QMainWindow):
 
         main_layout.addLayout(plot_layout, stretch=3)
 
-        # ==========================================
-        # RIGHT PANEL (Controls)
-        # ==========================================
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
         scroll_area.setMinimumWidth(400)
@@ -192,9 +184,6 @@ class SpectrometerGUI(QMainWindow):
         controls_widget = QWidget()
         controls_layout = QVBoxLayout(controls_widget)
 
-        # ----------------------------------------------------
-        # 1. Measurement
-        # ----------------------------------------------------
         meas_group = QGroupBox("Measurement")
         meas_layout = QVBoxLayout()
         
@@ -303,9 +292,6 @@ class SpectrometerGUI(QMainWindow):
         meas_group.setLayout(meas_layout)
         controls_layout.addWidget(meas_group)
 
-        # ----------------------------------------------------
-        # 2. Spectrometer Configurations
-        # ----------------------------------------------------
         spec_group = QGroupBox("Spectrometer Configurations")
         spec_layout = QGridLayout()
 
@@ -368,9 +354,6 @@ class SpectrometerGUI(QMainWindow):
         spec_group.setLayout(spec_layout)
         controls_layout.addWidget(spec_group)
 
-        # ----------------------------------------------------
-        # 3. Display ROI Settings
-        # ----------------------------------------------------
         roi_group = QGroupBox("Display ROI Settings")
         roi_layout = QVBoxLayout()
         self.radio_2d = QRadioButton("2D Image View")
@@ -399,9 +382,6 @@ class SpectrometerGUI(QMainWindow):
         roi_group.setLayout(roi_layout)
         controls_layout.addWidget(roi_group)
 
-        # ----------------------------------------------------
-        # 4. Background
-        # ----------------------------------------------------
         bg_group = QGroupBox("Background")
         bg_layout = QGridLayout()
         
@@ -425,9 +405,6 @@ class SpectrometerGUI(QMainWindow):
         bg_group.setLayout(bg_layout)
         controls_layout.addWidget(bg_group)
 
-        # ----------------------------------------------------
-        # 5. Fitting Configurations
-        # ----------------------------------------------------
         fit_group = QGroupBox("Fitting Configurations")
         fit_layout = QGridLayout()
         self.radio_fit_on = QRadioButton("ON")
@@ -461,103 +438,25 @@ class SpectrometerGUI(QMainWindow):
         fit_group.setLayout(fit_layout)
         controls_layout.addWidget(fit_group)
 
-        # ----------------------------------------------------
-        # 6. Pressure Calculation
-        # ----------------------------------------------------
+        self.pressure_window = None  # ウィンドウのインスタンスを保持する変数を初期化
+
         self.press_group = QGroupBox("Pressure Calculation")
         press_layout = QVBoxLayout()
         
-        press_radio_layout = QHBoxLayout()
-        self.radio_press_on = QRadioButton("ON")
-        self.radio_press_off = QRadioButton("OFF")
-        self.radio_press_off.setChecked(True)
-        press_radio_layout.addWidget(QLabel("Calculation:"))
-        press_radio_layout.addWidget(self.radio_press_on)
-        press_radio_layout.addWidget(self.radio_press_off)
-        press_layout.addLayout(press_radio_layout)
+        self.btn_open_pressure = QPushButton("Open Pressure Calculator")
+        self.btn_open_pressure.setStyleSheet("font-weight: bold; padding: 10px; background-color: #E91E63; color: white;")
+        self.btn_open_pressure.clicked.connect(self.open_pressure_calculator)
         
-        # フィッティング関数のミスマッチ警告用ラベル
-        self.lbl_press_warning = QLabel("")
-        self.lbl_press_warning.setStyleSheet("color: #f44336; font-weight: bold; font-size: 11px;")
-        press_layout.addWidget(self.lbl_press_warning)
-
-        p_top_layout = QGridLayout()
-        self.combo_sensor = CustomComboBox()
-        self.combo_sensor.addItems(list(self.sensor_data.keys()))
-        
-        self.combo_press_scale = CustomComboBox()
-        self.combo_press_scale.addItems(self.sensor_data["Ruby"]["scales"])
-        self.combo_press_scale.setCurrentText("Shen et al. 2020")
-        
-        self.spin_lambda0 = CustomDoubleSpinBox()
-        self.spin_lambda0.setRange(0, 2000)
-        self.spin_lambda0.setDecimals(4)
-        self.spin_lambda0.setValue(694.2300)
-        self.btn_set_r1 = QPushButton("Set current as λ0")
-        self.btn_set_r1.clicked.connect(self.on_set_r1_clicked)
-        
-        p_top_layout.addWidget(QLabel("Sensor:"), 0, 0)
-        p_top_layout.addWidget(self.combo_sensor, 0, 1)
-        p_top_layout.addWidget(QLabel("Scale:"), 1, 0)
-        p_top_layout.addWidget(self.combo_press_scale, 1, 1)
-        p_top_layout.addWidget(QLabel("λ0 (nm):"), 2, 0)
-        p_top_layout.addWidget(self.spin_lambda0, 2, 1)
-        p_top_layout.addWidget(self.btn_set_r1, 3, 0, 1, 2)
-        press_layout.addLayout(p_top_layout)
-
-        temp_shift_group = QGroupBox("Temperature shift")
-        ts_layout = QGridLayout()
-        self.radio_ts_on = QRadioButton("ON")
-        self.radio_ts_off = QRadioButton("OFF")
-        self.radio_ts_off.setChecked(True)
-        ts_radio_layout = QHBoxLayout()
-        ts_radio_layout.addWidget(self.radio_ts_on)
-        ts_radio_layout.addWidget(self.radio_ts_off)
-        self.combo_ts_scale = CustomComboBox()
-        self.combo_ts_scale.addItems(self.sensor_data["Ruby"]["t_scales"])
-        
-        temp_input_layout = QHBoxLayout()
-        self.spin_curr_temp_k = CustomDoubleSpinBox()
-        self.spin_curr_temp_k.setRange(0, 5000)
-        self.spin_curr_temp_k.setValue(300.0) 
-        self.lbl_temp_warning = QLabel("")
-        self.lbl_temp_warning.setStyleSheet("color: #f44336; font-weight: bold; font-size: 11px;")
-        temp_input_layout.addWidget(self.spin_curr_temp_k)
-        temp_input_layout.addWidget(self.lbl_temp_warning)
-        temp_input_layout.addStretch()
-        
-        self.spin_t0 = CustomDoubleSpinBox()
-        self.spin_t0.setRange(0, 5000)
-        self.spin_t0.setValue(300.0)
-        
-        self.spin_lambda0_t0 = CustomDoubleSpinBox()
-        self.spin_lambda0_t0.setRange(0, 2000)
-        self.spin_lambda0_t0.setDecimals(4)
-        self.spin_lambda0_t0.setValue(694.2300)
-        
-        ts_layout.addWidget(QLabel("Correct λ0:"), 0, 0)
-        ts_layout.addLayout(ts_radio_layout, 0, 1)
-        ts_layout.addWidget(QLabel("Scale:"), 1, 0)
-        ts_layout.addWidget(self.combo_ts_scale, 1, 1)
-        ts_layout.addWidget(QLabel("Current temp (K):"), 2, 0)
-        ts_layout.addLayout(temp_input_layout, 2, 1)
-        ts_layout.addWidget(QLabel("T0 (K):"), 3, 0)
-        ts_layout.addWidget(self.spin_t0, 3, 1)
-        ts_layout.addWidget(QLabel("λ0 at T0 (nm):"), 4, 0)
-        ts_layout.addWidget(self.spin_lambda0_t0, 4, 1)
-        temp_shift_group.setLayout(ts_layout)
-        press_layout.addWidget(temp_shift_group)
-        
+        press_layout.addWidget(self.btn_open_pressure)
         self.press_group.setLayout(press_layout)
+        
         controls_layout.addWidget(self.press_group)
+                    
 
         controls_layout.addStretch()
         scroll_area.setWidget(controls_widget)
         main_layout.addWidget(scroll_area, stretch=1)
 
-        # ==========================================
-        # SIGNALS AND CONNECTIONS
-        # ==========================================
         self.btn_single.clicked.connect(self.check_bg_and_take_single)
         self.btn_save_data.clicked.connect(self.on_save_data_clicked)
         self.btn_commence.clicked.connect(self.check_bg_and_start_meas)
@@ -589,8 +488,6 @@ class SpectrometerGUI(QMainWindow):
         self.chk_rescale_y.toggled.connect(self.on_fit_settings_changed)
         
         self.btn_read_temp.clicked.connect(self.request_temperature_read)
-        self.radio_ts_on.toggled.connect(self.toggle_temp_shift_inputs)
-        self.radio_ts_off.toggled.connect(self.toggle_temp_shift_inputs)
 
         self.radio_fit_on.toggled.connect(self.toggle_fitting_panel)
         self.radio_fit_off.toggled.connect(self.toggle_fitting_panel)
@@ -598,24 +495,10 @@ class SpectrometerGUI(QMainWindow):
         self.spin_fit_start.valueChanged.connect(self.on_fit_settings_changed)
         self.spin_fit_end.valueChanged.connect(self.on_fit_settings_changed)
         
-        self.radio_fit_on.toggled.connect(self.update_pressure_calc_state)
-        self.radio_fit_off.toggled.connect(self.update_pressure_calc_state)
-        self.combo_fit_func.currentTextChanged.connect(self.update_pressure_calc_state)
         
-        self.radio_press_on.toggled.connect(self.on_fit_settings_changed)
-        self.radio_press_on.toggled.connect(self.update_pressure_calc_state)
-        self.radio_press_off.toggled.connect(self.on_fit_settings_changed)
-        self.radio_press_off.toggled.connect(self.update_pressure_calc_state)
         
-        self.combo_sensor.currentTextChanged.connect(self.on_sensor_changed)
         
-        self.combo_press_scale.currentTextChanged.connect(self.on_fit_settings_changed)
-        self.spin_lambda0.valueChanged.connect(self.on_fit_settings_changed)
 
-        self.spin_curr_temp_k.valueChanged.connect(self.update_temperature_correction)
-        self.spin_t0.valueChanged.connect(self.update_temperature_correction)
-        self.spin_lambda0_t0.valueChanged.connect(self.update_temperature_correction)
-        self.combo_ts_scale.currentTextChanged.connect(self.update_temperature_correction)
 
         self.spin_acq_time.editingFinished.connect(self.on_exposure_changed)
         self.spin_cooler_temp.editingFinished.connect(self.on_temperature_changed)
@@ -631,8 +514,9 @@ class SpectrometerGUI(QMainWindow):
         self.seq_timer = QTimer(self)
         self.seq_timer.timeout.connect(self.update_seq_progress)
         
-        self.update_pressure_calc_state() 
         self.update_plot_labels()
+        self.radio_spec_mode_wl.toggled.connect(self.sync_pressure_calculator_mode)
+        self.radio_spec_mode_raman.toggled.connect(self.sync_pressure_calculator_mode)
         
         self.spec_ctrl.initialize()
         
@@ -775,22 +659,9 @@ class SpectrometerGUI(QMainWindow):
         self.spin_fit_start.setEnabled(enabled)
         self.spin_fit_end.setEnabled(enabled)
         
-        self.radio_press_on.setEnabled(enabled)
-        self.radio_press_off.setEnabled(enabled)
-        self.combo_sensor.setEnabled(enabled)
-        self.combo_press_scale.setEnabled(enabled)
-        self.btn_set_r1.setEnabled(enabled)
         
-        self.radio_ts_on.setEnabled(enabled)
-        self.radio_ts_off.setEnabled(enabled)
-        self.combo_ts_scale.setEnabled(enabled)
-        self.spin_curr_temp_k.setEnabled(enabled)
-        self.spin_t0.setEnabled(enabled)
-        self.spin_lambda0_t0.setEnabled(enabled)
         
         if enabled:
-            self.update_pressure_calc_state()
-            self.toggle_temp_shift_inputs()
             self.toggle_fitting_panel()
             self.apply_roi_settings()
 
@@ -951,36 +822,14 @@ class SpectrometerGUI(QMainWindow):
             fit_end = self.spin_fit_end.value()
             is_double = "Double" in func
             
-            current_sensor = self.combo_sensor.currentText()
-            req_double = self.sensor_data.get(current_sensor, {}).get("req_double", True)
-            is_match = (is_double == req_double)
-            calc_press = self.press_group.isEnabled() and self.radio_press_on.isChecked() and is_match
             
             try:
                 with open(self.seq_fitting_summary_path, "w", encoding="utf-8") as f:
                     f.write(f"# Fitting Function: {func}\n")
                     f.write(f"# Fitting Range: {fit_start} to {fit_end}\n")
-                    if calc_press:
-                        scale = self.combo_press_scale.currentText()
-                        lam0 = self.spin_lambda0.value()
-                        f.write(f"# Pressure Scale: {scale}\n")
-                        f.write(f"# Lambda0: {lam0:.4f}\n")
-                        if self.radio_ts_on.isChecked():
-                            t_scale = self.combo_ts_scale.currentText()
-                            curr_t = self.spin_curr_temp_k.value()
-                            f.write(f"# Temp Correction: {t_scale}, Temp: {curr_t} K\n")
                     
-                    header_cols = ["Filename", "Datetime"]
-                    if is_double:
-                        header_cols.extend(["Peak1_Pos", "Peak1_Err", "Width1", "Width1_Err", 
-                                            "Peak2_Pos", "Peak2_Err", "Width2", "Width2_Err", "R2"])
-                    else:
-                        header_cols.extend(["Peak_Pos", "Peak_Err", "Width", "Width_Err", "R2"])
                         
-                    if calc_press:
-                        header_cols.extend(["Pressure_GPa", "Pressure_Err"])
                         
-                    f.write(",".join(header_cols) + "\n")
             except Exception as e:
                 print(f"Failed to create summary file: {e}")
                 self.seq_fitting_summary_path = None
@@ -1040,138 +889,56 @@ class SpectrometerGUI(QMainWindow):
         self.seq_content.setVisible(checked)
         self.seq_toggle_btn.setText("▼ Sequential measurements" if checked else "▶ Sequential measurements")
 
-    def on_sensor_changed(self, sensor):
-        data = self.sensor_data.get(sensor, {})
-        scales = data.get("scales", [])
-        t_scales = data.get("t_scales", [])
-        lam0_default = data.get("lam0_default", 694.2300)
+    def sync_pressure_calculator_mode(self):
+        """メイン画面の nm/Raman 切り替えを圧力計算ウィンドウに即時反映させる"""
+        if self.pressure_window:
+            current_unit = "cm-1" if self.radio_spec_mode_raman.isChecked() else "nm"
+            self.pressure_window.update_mode(current_unit)
+
+    def open_pressure_calculator(self):
+        """圧力計算ウィンドウを開く (ボタンクリック時)"""
+        current_unit = "cm-1" if self.radio_spec_mode_raman.isChecked() else "nm"
         
-        self.combo_press_scale.blockSignals(True)
-        self.combo_press_scale.clear()
-        self.combo_press_scale.addItems(scales)
-        self.combo_press_scale.blockSignals(False)
-        
-        self.combo_ts_scale.blockSignals(True)
-        self.combo_ts_scale.clear()
-        self.combo_ts_scale.addItems(t_scales)
-        self.combo_ts_scale.blockSignals(False)
-
-        self.spin_lambda0.blockSignals(True)
-        self.spin_lambda0.setValue(lam0_default)
-        self.spin_lambda0.blockSignals(False)
-        
-        self.spin_lambda0_t0.blockSignals(True)
-        self.spin_lambda0_t0.setValue(lam0_default)
-        self.spin_lambda0_t0.blockSignals(False)
-        
-        self.update_pressure_calc_state()
-        self.update_temperature_correction()
-
-    def update_pressure_calc_state(self):
-        is_fitting_on = self.radio_fit_on.isChecked()
-        is_press_on = self.radio_press_on.isChecked()
-        
-        self.press_group.setEnabled(is_fitting_on)
-
-        if not is_fitting_on:
-            self.lbl_press_warning.setText("")
-            return
-
-        is_double_fit = "Double" in self.combo_fit_func.currentText()
-        current_sensor = self.combo_sensor.currentText()
-        req_double = self.sensor_data.get(current_sensor, {}).get("req_double", True)
-
-        is_match = (is_double_fit == req_double)
-
-        if is_press_on:
-            if not is_match:
-                if req_double:
-                    self.lbl_press_warning.setText("Warning: This scale requires a Double peak fitting function.")
-                else:
-                    self.lbl_press_warning.setText("Warning: This scale requires a Single peak fitting function.")
-            else:
-                self.lbl_press_warning.setText("")
+        if self.pressure_window is None:
+            self.pressure_window = PressureCalculatorWindow(self, mode=current_unit)
         else:
-            self.lbl_press_warning.setText("")
+            self.pressure_window.update_mode(current_unit)
 
-        controls_enabled = is_press_on and is_match
+        self.pressure_window.show()
+        self.pressure_window.raise_()
+        self.pressure_window.activateWindow()
 
-        self.combo_sensor.setEnabled(is_press_on)
-        self.combo_press_scale.setEnabled(controls_enabled)
         
-        is_ts_on = self.radio_ts_on.isChecked()
-        self.spin_lambda0.setEnabled(controls_enabled and not is_ts_on)
-        self.btn_set_r1.setEnabled(controls_enabled and not is_ts_on)
-
-        self.radio_ts_on.setEnabled(controls_enabled)
-        self.radio_ts_off.setEnabled(controls_enabled)
         
-        self.toggle_temp_shift_inputs()
-        
-        self.on_fit_settings_changed()
 
-    def check_temp_limits(self):
-        if not self.radio_ts_on.isChecked():
-            self.lbl_temp_warning.setText("")
-            return
+        
+        
+
+        
+
+
+
+
+
+
+        
+
+        
+        
+
             
-        t_scale = self.combo_ts_scale.currentText()
-        curr_t = self.spin_curr_temp_k.value()
-        limits = self.t_scale_limits.get(t_scale)
         
-        if limits:
-            min_t, max_t = limits
-            warnings = []
-            if min_t is not None and curr_t < min_t:
-                warnings.append(f"< {min_t}K")
-            if max_t is not None and curr_t > max_t:
-                warnings.append(f"> {max_t}K")
                 
-            if warnings:
-                self.lbl_temp_warning.setText(f"Out of range ({', '.join(warnings)})")
-            else:
-                self.lbl_temp_warning.setText("")
-        else:
-            self.lbl_temp_warning.setText("")
 
-    def toggle_temp_shift_inputs(self):
-        is_fitting_on = self.radio_fit_on.isChecked()
-        is_press_on = self.radio_press_on.isChecked()
-        is_double_fit = "Double" in self.combo_fit_func.currentText()
-        current_sensor = self.combo_sensor.currentText()
-        req_double = self.sensor_data.get(current_sensor, {}).get("req_double", True)
-        is_match = (is_double_fit == req_double)
         
-        controls_enabled = is_fitting_on and is_press_on and is_match
-        is_ts_on = self.radio_ts_on.isChecked()
 
-        ts_enabled = controls_enabled and is_ts_on
 
-        self.combo_ts_scale.setEnabled(ts_enabled)
-        self.spin_curr_temp_k.setEnabled(ts_enabled)
-        self.spin_t0.setEnabled(ts_enabled)
-        self.spin_lambda0_t0.setEnabled(ts_enabled)
         
-        self.spin_lambda0.setEnabled(controls_enabled and not is_ts_on)
-        self.btn_set_r1.setEnabled(controls_enabled and not is_ts_on)
         
-        self.update_temperature_correction()
 
-    def update_temperature_correction(self):
-        self.check_temp_limits()
-        if self.radio_ts_on.isChecked():
-            scale = self.combo_ts_scale.currentText()
-            curr_t = self.spin_curr_temp_k.value()
-            t0 = self.spin_t0.value()
-            lam0_t0 = self.spin_lambda0_t0.value()
             
-            corrected_lam0 = PressureCalculator.correct_lambda0(scale, curr_t, t0, lam0_t0)
             
-            self.spin_lambda0.blockSignals(True)
-            self.spin_lambda0.setValue(corrected_lam0)
-            self.spin_lambda0.blockSignals(False)
             
-        self.on_fit_settings_changed()
 
     def load_spectrometer_config(self):
         config_path = "spectrometerConfig.json"
@@ -1459,18 +1226,6 @@ class SpectrometerGUI(QMainWindow):
             mode = "2D" if self.radio_2d.isChecked() else "1D (Full)" if self.radio_1d_full.isChecked() else "1D (ROI)"
             header += f"Measurement Mode: {mode}\n"
 
-            # try:
-            #     # camera_threadに現在温度を返すメソッドやプロパティがある場合
-            #     if hasattr(self.camera_thread, 'current_temperature'):
-            #         temp = self.camera_thread.current_temperature
-            #         header += f"Detector Temperature: {temp} C\n"
-            #     elif hasattr(self.camera_thread, 'get_temperature'):
-            #         temp = self.camera_thread.get_temperature()
-            #         header += f"Detector Temperature: {temp} C\n"
-            #     else:
-            #         header += f"Detector Temperature: N/A\n"
-            # except Exception:
-            #     header += f"Detector Temperature: Error\n"
             
             if is_1d:
                 x_data = self.get_x_axis(len(self.latest_1d_data))
@@ -1519,14 +1274,7 @@ class SpectrometerGUI(QMainWindow):
                             f"{res.get('Width', 0):.6f}", f"{res.get('Width_Err', 0):.6f}"
                         ]
                         
-                    is_double = "Double" in func
-                    current_sensor = self.combo_sensor.currentText()
-                    req_double = self.sensor_data.get(current_sensor, {}).get("req_double", True)
-                    is_match = (is_double == req_double)
                     
-                    if 'Pressure' in res and is_match:
-                        fit_header += ",Pressure_GPa,Pressure_Err"
-                        vals.extend([f"{res.get('Pressure', 0):.6f}", f"{res.get('Pressure_Err', 0):.6f}"])
                         
                     fit_data_lines = [fit_header + "\n", ",".join(vals) + "\n"]
                         
@@ -1900,34 +1648,14 @@ class SpectrometerGUI(QMainWindow):
                     text += f"<b>R-value:</b><br> {res['R2']:.4f}</span>"
                     
                     is_double_fit = res.get("is_double")
-                    current_sensor = self.combo_sensor.currentText()
-                    req_double = self.sensor_data.get(current_sensor, {}).get("req_double", True)
-                    is_match = (is_double_fit == req_double)
                     
-                    is_press_active = False
-                    if self.press_group.isEnabled() and self.radio_press_on.isChecked() and is_match:
-                        is_press_active = True
+                    
+                    if self.pressure_window is not None and self.pressure_window.isVisible():
+                        self.pressure_window.set_current_peak(w_peak1, w_err1)
 
-                    if is_press_active:
-                        sensor = self.combo_sensor.currentText()
-                        scale = self.combo_press_scale.currentText()
-                        lam0 = self.spin_lambda0.value()
                         
-                        calc_peak = w_peak1
-                        calc_err = w_err1
                         
-                        if self.calib_coeffs is not None and self.radio_spec_mode_raman.isChecked():
-                            ex_wl = self.spin_exc_wl.value()
-                            if ex_wl > 0:
-                                calc_peak = 1e7 / (1e7 / ex_wl - w_peak1)
-                                calc_err = abs(w_err1 * (calc_peak**2) / 1e7)
                         
-                        p, dp = PressureCalculator.calculate(sensor, scale, calc_peak, lam0, calc_err)
-                        if p is not None:
-                            text += f"<br><br><span style='font-size: 16px; font-weight: bold; color: white;'>"
-                            text += f"Pressure:<br>{p:.3f} ± {dp:.3f} GPa</span>"
-                            self.latest_fit_res['Pressure'] = p
-                            self.latest_fit_res['Pressure_Err'] = dp
 
                     self.fitting_text.setHtml(text)
                 else:
@@ -1979,18 +1707,12 @@ class SpectrometerGUI(QMainWindow):
                     if self.radio_fit_on.isChecked() and getattr(self, 'seq_fitting_summary_path', None):
                         is_double = "Double" in self.combo_fit_func.currentText()
                         
-                        current_sensor = self.combo_sensor.currentText()
-                        req_double = self.sensor_data.get(current_sensor, {}).get("req_double", True)
-                        is_match = (is_double == req_double)
-                        calc_press = self.press_group.isEnabled() and self.radio_press_on.isChecked() and is_match
                         
                         res = self.latest_fit_res
                         cols = [filename, date_str]
                         
                         if res is None:
                             cols.extend(["NaN"] * (9 if is_double else 5))
-                            if calc_press: 
-                                cols.extend(["NaN", "NaN"])
                         else:
                             if is_double:
                                 cols.extend([
@@ -2005,10 +1727,6 @@ class SpectrometerGUI(QMainWindow):
                                     f"{res.get('Peak', np.nan):.6f}", f"{res.get('Peak_Err', np.nan):.6f}",
                                     f"{res.get('Width', np.nan):.6f}", f"{res.get('Width_Err', np.nan):.6f}",
                                     f"{res.get('R2', np.nan):.6f}"
-                                ])
-                            if calc_press:
-                                cols.extend([
-                                    f"{res.get('Pressure', np.nan):.6f}", f"{res.get('Pressure_Err', np.nan):.6f}"
                                 ])
                         
                         try:
@@ -2078,10 +1796,10 @@ class SpectrometerGUI(QMainWindow):
 
 def print_software_and_author_info(): 
     print(
-        "\n====================\n====================\n"\
+        "\n========================================\n========================================\n"\
         "Andor Spectrometer Control & Analysis\nHiroki Kobayashi (The University of Tokyo), 2026\n"\
         "https://github.com/khsacc/AndorPy\n"\
-        "====================\n====================\n"
+        "========================================\n========================================\n"
     )
 
 def check_and_create_config():

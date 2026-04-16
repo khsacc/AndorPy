@@ -1,97 +1,96 @@
+import numpy as np
+
 class PressureCalculator:
+    # センサーごとの初期値（ゼロ圧力ピーク）
+    INITIAL_VALUES = {
+        "Ruby": 694.300,
+        "Sm2+:SrB4O7": 685.410,
+        "13C diamond 1st order": 1333.00,
+        "Cubic BN": 1054.00,
+        "Zircon v3(SiO4)": 1008.00
+    }
+
+    # センサーごとに温度スケールの有効範囲を管理
+    TEMP_VALID_RANGES = {
+        "Ruby": {
+            "Ragan et al. 1992": (0.0, 600.0),
+            "Datchi et al. 2007": (290, 800) 
+        },
+        "Sm2+:SrB4O7": {
+            "Datchi et al. 2007": (290, 900.0)
+        },
+        "13C diamond 1st order": {
+            "Schiferl et al. 1997": (290, 1500.0)
+        }
+        # 他のセンサーやスケールも同様に追加可能
+    }
+
     @staticmethod
-    def calculate(sensor, scale, lam, lam0, lam_err=0.0):
-        """
-        Calculate pressure using an optical pressure sensor
-        :param sensor: sensor material (e.g., "Ruby", "Sm2+:SrB4O7")
-        :param scale: scale for the pressure calculation
-        :param lam: measured peak wavelength (nm)
-        :param lam0: zero-pressure peak wavelength (nm)
-        :param lam_err: error from fitting
-        :return: (pressure [GPa], error [GPa])。If either the sensor or the scale is undefined, the return will be(None, None)
-        """
+    def is_temp_in_range(sensor, t_scale, temp):
+        """センサーと温度スケールの組み合わせから範囲内か判定"""
+        # 親（センサー）が存在するか
+        if sensor not in PressureCalculator.TEMP_VALID_RANGES:
+            return True, (None, None)
+        
+        # 子（温度スケール）が存在するか
+        s_dict = PressureCalculator.TEMP_VALID_RANGES[sensor]
+        if t_scale not in s_dict:
+            return True, (None, None)
+            
+        rng = s_dict[t_scale]
+        is_valid = rng[0] <= temp <= rng[1]
+        return is_valid, rng
+
+    @staticmethod
+    def calculate(sensor, p_scale, lam, lam0, lam_err=0.0, current_t=298.15, t0=298.15):
+        try:
+            # --- 13C Diamond (Schiferl 1997) ---
+            if sensor == "13C diamond 1st order" and p_scale == "Schiferl et al. 1997":
+                # ダミー計算式
+                p = 0.354 * (lam - (1333.0 - 0.025 * (current_t - t0)))
+                return p, 0.354 * lam_err
+
+            # --- Ruby Scales ---
+            if sensor == "Ruby":
+                if p_scale == "Piermarini et al. 1975":
+                    p = 2.746 * (lam - lam0)
+                    return p, 2.746 * lam_err
+                elif p_scale == "Mao et al. 1986":
+                    A, B = 1904.0, 7.665
+                    dlam = lam - lam0
+                    p = (A / B) * (((dlam / lam0)+1)**B - 1.0)
+                    dp = A * (lam / lam0)**(B - 1.0) * (lam_err / lam0) # 要確認！
+                    return p, dp
+                elif p_scale == "Shen et al. 2020":
+                    A, B = 1870.0, 5.63
+                    ratio = (lam - lam0) / lam0
+                    p = A * ratio * (1.0 + B * ratio)
+                    dp = A * (lam_err / lam0) * (1.0 + 2.0 * B * ratio) # 要確認！
+                    return p, dp
+
+            # --- Sm2+:SrB4O7 ---
+            if sensor == "Sm2+:SrB4O7":
+                if p_scale == "Datchi 1997":
+                    dlam = lam - lam0
+                    p = 4.032 * dlam * (1+9.29 * 10**-3 * dlam) / (1+2.32 * 10 ** -2 * dlam) 
+                    return p, lam_err # Todo: 誤差の計算
+
+            # その他
+            if sensor == "Cubic BN": return 0.45 * (lam - lam0), 0.0
+            if sensor == "Zircon v3(SiO4)": return 0.58 * (lam - lam0), 0.0
+
+            return None, None
+        except:
+            return None, None
+
+    @staticmethod
+    def get_corrected_lam0(sensor, t_scale, current_t, t0, lam0_at_t0):
         if sensor == "Ruby":
-            if scale == "Piermarini et al. 1975":
-                p = 2.740 * (lam - lam0)
-                dp = 2.740 * lam_err
-                
-            elif scale == "Mao et al. hydro 1986":
-                A = 1904.0
-                B = 7.665
-                p = (A / B) * ((lam / lam0)**B - 1.0)
-                dp = A * (lam / lam0)**(B - 1.0) * (lam_err / lam0)
-                
-            elif scale == "Shen et al. 2020":
-                A = 1.87 * 10**3
-                B = 5.63
-                lam_ratio = (lam - lam0) / lam0
-                p = A * lam_ratio * (1.0 + B * lam_ratio)
-                dp = abs((A / lam0) * (1.0 + 2.0 * B * lam_ratio) * lam_err)
-                
-            else:
-                return None, None
-                
-            return p, abs(dp)
-
-        elif sensor == "Sm2+:SrB4O7":
-            if scale == "Datchi et al. 1997":
-                dlam = lam - lam0
-                A = 4.032
-                B = 9.29e-3
-                C = 2.32e-2
-                
-                p = A * dlam * (1.0 + B * dlam) / (1.0 + C * dlam)
-                
-                dp_dlam = A * (1.0 + 2.0 * B * dlam + B * C * dlam**2) / ((1.0 + C * dlam)**2)
-                dp = abs(dp_dlam * lam_err)
-                
-                return p, dp
-                
-            else:
-                return None, None
-
-        return None, None
-
-    @staticmethod
-    def correct_lambda0(scale, current_t, t0, lam0_at_t0):
-        """
-        指定されたスケールの温度依存性関数を用いて、現在の温度における lambda0 を計算する
-        """
-        if scale == "Ragan 1992":
-            # 波数 (cm^-1) を計算する式
-            def ragan_nu(t):
-                return 14423.0 + 4.49e-2 * t - 4.81e-4 * (t**2) + 3.71e-7 * (t**3)
-            
-            # 波数から波長 (nm) に変換
-            def ragan_lam(t):
-                nu = ragan_nu(t)
-                return 1e7 / nu if nu != 0 else 0.0
-                
-            lam_t = ragan_lam(current_t)
-            lam_t0 = ragan_lam(t0)
-            
-            # 温度シフトの差分のみを用いて、入力された基準値にオフセットとして加算する
-            corrected_lam0 = lam_t - lam_t0 + lam0_at_t0
-            return corrected_lam0
-            
-        elif scale == "Datchi et al. 2007 Linear":
-            # ルビーの線形補正 (T <= 600 K を想定)
-            return lam0_at_t0 + 7.3e-3 * (current_t - t0)
-            
-        elif scale == "Datchi et al. 1997":
-            # Sm2+:SrB4O7 の温度補正
-            # For T <= 500 K, lambda = lambda0.
-            # For T > 500 K,  lambda = lambda0 + 1.06*10^-4 * (T-500) + 1.5*10^-7 * (T-500)^2
-            def datchi_shift(t):
-                if t <= 500.0:
-                    return 0.0
-                else:
-                    dt = t - 500.0
-                    return 1.06e-4 * dt + 1.5e-7 * (dt**2)
-                    
-            shift_current = datchi_shift(current_t)
-            shift_t0 = datchi_shift(t0)
-            
-            return lam0_at_t0 + (shift_current - shift_t0)
-
+            if t_scale == "Ragan et al. 1992":
+                shift = 0.007 * (current_t - t0)
+                return lam0_at_t0 + shift
+            elif t_scale == "Datchi et al. 2007":
+                return lam0_at_t0 + 0.0073 * (current_t - t0)
+        if sensor == "Sm2+:SrB4O7": 
+            return None
         return lam0_at_t0

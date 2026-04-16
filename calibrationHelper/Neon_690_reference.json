@@ -1,7 +1,7 @@
 {
     "material": "Neon",
     "approximate_range": "690",
-    "reference_url": "https://physics.nist.gov/PhysRefData/Handbook/Tables/neontable2.htm",
+    "reference_url": "https://doi.org/10.1063/1.1797771",
     "spectrum": {
         "wavelength": [
             669.4001082840542,
