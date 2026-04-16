@@ -965,6 +965,7 @@ class SpectrometerGUI(QMainWindow):
         try:
             with open(config_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
+                print("spectrometerConfig.json read:", json.dumps(data, indent=2))
                 
                 if "grating" in data and len(data["grating"]) > 0 and isinstance(data["grating"][0], (int, float)):
                     new_grating = []

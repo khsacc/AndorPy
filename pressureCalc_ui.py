@@ -1,6 +1,6 @@
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QFormLayout, QComboBox,
                              QLabel, QDoubleSpinBox, QAbstractSpinBox, QWidget,
-                             QRadioButton, QHBoxLayout, QGroupBox)
+                             QRadioButton, QHBoxLayout, QGroupBox, QPushButton)
 from PyQt6.QtCore import Qt
 from pressureCalc import PressureCalculator
 
@@ -41,6 +41,8 @@ class PressureCalculatorWindow(QDialog):
         self.spin_lam0.setRange(-99999, 99999); self.spin_lam0.setDecimals(3)
         self.lbl_lam0_tag = QLabel(f"Zero-pressure peak ({self.unit}):")
         form.addRow(self.lbl_lam0_tag, self.spin_lam0)
+        self.btn_apply_current_lam0 = QPushButton("Apply current value as zero-pressure pos.")
+        form.addWidget(self.btn_apply_current_lam0)
         top_group.setLayout(form)
         layout.addWidget(top_group)
 
@@ -85,7 +87,7 @@ class PressureCalculatorWindow(QDialog):
         layout.addWidget(self.temp_group)
 
         # 3. 結果表示
-        self.lbl_result = QLabel("P = 0.000 +- 0.000 GPa")
+        self.lbl_result = QLabel("P = 0.000 +/- 0.000 GPa")
         self.lbl_result.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.lbl_result.setStyleSheet("background: #333; color: white; font-size: 24px; padding: 15px; border-radius: 5px;")
         layout.addWidget(self.lbl_result)
@@ -99,6 +101,10 @@ class PressureCalculatorWindow(QDialog):
         self.spin_t.valueChanged.connect(self.calculate)
         self.spin_t0.valueChanged.connect(self.calculate)
         self.radio_on.toggled.connect(self.toggle_temp_ui)
+        self.btn_apply_current_lam0.clicked.connect(self.set_current_pos_as_lam0)
+
+    def set_current_pos_as_lam0(self):
+        self.spin_lam0.setValue(self.current_peak_val)
 
     def toggle_temp_ui(self):
         is_on = self.radio_on.isChecked()
