@@ -133,7 +133,7 @@ class SpectrometerGUI(QMainWindow):
         self.fitting_panel.setFixedWidth(240)
         self.fitting_text = QTextEdit()
         self.fitting_text.setReadOnly(True)
-        self.fitting_text.setStyleSheet("background-color: transparent; font-family: Consolas; font-size: 11px; border: none; color: white;")
+        self.fitting_text.setStyleSheet("font-family: Consolas; font-size: 11px; border: none;")
         fit_p_layout = QVBoxLayout()
         fit_p_layout.addWidget(self.fitting_text)
         self.fitting_panel.setLayout(fit_p_layout)
