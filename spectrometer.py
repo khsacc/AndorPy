@@ -1,5 +1,7 @@
 import ctypes
 import time
+import json  
+import os    
 from PyQt6.QtCore import QThread, pyqtSignal
 
 class SpectrometerController:
@@ -19,9 +21,22 @@ class SpectrometerController:
             self.is_initialized = False
             return False
 
-        print("Spectrometer initialization...")
+        print("Spectrometer initialisation...")
+
+        dll_path = "ShamrockCIF.dll" # デフォルト値
+        config_path = "spectrometerConfig.json"
+
+        if os.path.exists(config_path):
+            try:
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    config = json.load(f)
+                    # JSON内に "dll_path" キーがあれば取得、なければデフォルト値
+                    dll_path = config.get("dll_path", "ShamrockCIF.dll")
+            except Exception as e:
+                print(f"Failed to read config file: {e}. Using default path.")
+
         try:
-            self.shamrock = ctypes.windll.LoadLibrary("C:\Program Files\Andor SDK\Shamrock64\ShamrockCIF.dll")
+            self.shamrock = ctypes.windll.LoadLibrary(dll_path)
             ini_path = ctypes.create_string_buffer(b"")
             ret = self.shamrock.ShamrockInitialize(ini_path)
             
