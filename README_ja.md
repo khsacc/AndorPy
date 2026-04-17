@@ -31,7 +31,7 @@ Andor製のカメラ（検出器）および分光器を制御し、スペクト
 
 ### 圧力計算画面（「Open pressure calculator」ボタンをクリックして開く）
 
-* 横軸が波長のモードの場合、蛍光スケール、横軸がRaman shiftのモードの場合、Ramanスケールを用いた圧力計算が可能です。
+* 横軸が波長のモードの場合、蛍光スケール、横軸がRaman shiftのモードの場合、Ramanスケールを用いた圧力計算が可能です。使用できるスケールは以下の通りです
 * 蛍光スケール
     * ルビー（Cr<sup>3+</sup>:Al<sub>2</sub>O<sub>3</sub>）
         * 圧力計算
@@ -40,6 +40,8 @@ Andor製のカメラ（検出器）および分光器を制御し、スペクト
             * Mao et al., <i>J. Geophys. Res.</i> (1986) [DOI: 10.1029/JB091iB05p04673](https://doi.org/10.1029/JB091iB05p04673)
             * Piermarini et al., <i>J. Appl. Phys.</i> (1975) [DOI: 10.1063/1.321957](10.1063/1.321957)
         * 温度シフト
+            * 0 - 600 K, Ragan et al., 
+            * 296 - 800 K, Datchi et al., 
     * Sm<sup>2+</sup>:SrB<sub>4</sub>O<sub>7</sub>
 * Raman スケール
     * <sup>13</sup>C diamond first order
