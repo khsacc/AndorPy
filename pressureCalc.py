@@ -66,15 +66,50 @@ class PressureCalculator:
                     A =1820
                     B = 14
                     C = 7.3
-                    p = (A / (B+C) ) * (np.exp(((B+C)/C) * (1-(lam / lam0)**(-C))) - 1)
-                    return p # todo 誤差
+                    A_err = 30
+                    B_err = 2
+                    C_err = 0
+                    r = lam / lam0
+
+                    p = (A / (B+C) ) * (np.exp(((B+C)/C) * (1-r**(-C))) - 1)
+
+
+                    X = (B + C)/C * (1 - r**(-C))
+                    expX = np.exp(X)
+
+                    # 偏微分
+                    dp_dA = (expX - 1)/(B + C)
+
+                    dX_dB = (1/C)*(1 - r**(-C))
+                    dp_dB = -A/(B + C)**2 * (expX - 1) + (A/(B + C))*expX*dX_dB
+
+                    dX_dC = (
+                        -B/C**2 * (1 - r**(-C))
+                        + (B + C)/C * r**(-C) * np.log(r)
+                    )
+                    dp_dC = -A/(B + C)**2 * (expX - 1) + (A/(B + C))*expX*dX_dC
+
+                    dX_dlam = (B + C)/lam * r**(-C)
+                    dp_dlam = (A/(B + C)) * expX * dX_dlam
+
+                    # 合成誤差
+                    dp = np.sqrt(
+                        (dp_dA * A_err)**2 +
+                        (dp_dB * B_err)**2 +
+                        (dp_dC * C_err)**2 +
+                        (dp_dlam * lam_err)**2
+)
+                    return p, dp
                 
                 elif p_scale == "Dorogokupets & Oganov 2007":
                     A=1884
                     m = 5.5
                     dlam=lam - lam0
                     p=A(dlam/ lam0) * (1+m*dlam/ lam0)
-                    return p # todo: 誤差
+
+                    x = dlam / lam0
+                    dp = abs(A / lam0 * (1 + 2*m*x)) * lam_err
+                    return p, dp
 
                 elif p_scale == "Shen et al. 2020":
                     A, B = 1870.0, 5.63
