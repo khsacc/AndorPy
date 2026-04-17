@@ -898,46 +898,23 @@ class SpectrometerGUI(QMainWindow):
     def open_pressure_calculator(self):
         """圧力計算ウィンドウを開く (ボタンクリック時)"""
         current_unit = "cm-1" if self.radio_spec_mode_raman.isChecked() else "nm"
-        
-        if self.pressure_window is None:
-            self.pressure_window = PressureCalculatorWindow(self, mode=current_unit)
+
+        if self.radio_fit_off.isChecked():
+            msgBox_fitRequired = QMessageBox(self)
+            msgBox_fitRequired.setIcon(QMessageBox.Icon.Warning)
+            msgBox_fitRequired.setWindowTitle("Fitting required")
+            msgBox_fitRequired.setText("Please activate peak fitting to calculate pressure.")
+            msgBox_fitRequired.exec()
         else:
-            self.pressure_window.update_mode(current_unit)
+                    
+            if self.pressure_window is None:
+                self.pressure_window = PressureCalculatorWindow(self, mode=current_unit)
+            else:
+                self.pressure_window.update_mode(current_unit)
 
-        self.pressure_window.show()
-        self.pressure_window.raise_()
-        self.pressure_window.activateWindow()
-
-        
-        
-
-        
-        
-
-        
-
-
-
-
-
-
-        
-
-        
-        
-
-            
-        
-                
-
-        
-
-
-        
-        
-
-            
-            
+            self.pressure_window.show()
+            self.pressure_window.raise_()
+            self.pressure_window.activateWindow()
             
 
     def load_spectrometer_config(self):
