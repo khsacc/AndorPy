@@ -26,9 +26,9 @@ Andor製のカメラ（検出器）および分光器を制御し、スペクト
   * Gauss, Lorentz, Pseudo Voigt 関数の単一ピーク・ダブルピークフィッティング
   * フィッティング範囲の自動・手動設定
 * **圧力計算機能 (高圧実験向け)**
-  * 蛍光シフトによる圧力計算
-    * Ruby（圧力シフト：Shen+ 2020, Mao+ 1986, Piermarini+ 1975. 温度補正：Ragan+ 1992）
-    * Sm<sup>2+</sup>:SrB<sub>4</sub>O<sub>7</sub>（圧力シフト：Datchi+ 1997. 温度シフト：Datchi: 1997）
+  * 蛍光シフト・ラマンシフトによる圧力計算
+    <!-- * Ruby（圧力シフト：Shen+ 2020, Mao+ 1986, Piermarini+ 1975. 温度補正：Ragan+ 1992）
+    * Sm<sup>2+</sup>:SrB<sub>4</sub>O<sub>7</sub>（圧力シフト：Datchi+ 1997. 温度シフト：Datchi: 1997） -->
 
 ## 必須環境 (Requirements)
 
@@ -87,7 +87,13 @@ Andor製のカメラ（検出器）および分光器を制御し、スペクト
 
 ### フィッティングと圧力計算
 * 「Fitting Configurations」を **ON** にすると、表示されているスペクトルに対してリアルタイムでフィッティングが行われます。
-* ダブルピークでフィッティングが成功している場合、「Pressure Calculation」セクションを **ON** にすることで、ルビーのR1ピークから圧力を自動計算して表示させることができます。
+* 対応している圧力センサーとスケール
+    * Ruby
+        * 圧力計算：Shen+ 2020, Dorogokupets & Oganov 2007, Holzapfel 2003, Mao+ 1986, Piermarini+ 1975
+        * 温度補正：Ragan+ 1992, Datchi+ 2007 (高温用)
+    * Sm<sup>2+</sup>:SrB<sub>4</sub>O<sub>7</sub>
+        * 圧力計算：Datchi+ 1997, Datchi+ 2007, 
+        * 温度補正：Datchi+ 1997, Datchi 2007 
 
 ##  保存されるファイル
 
