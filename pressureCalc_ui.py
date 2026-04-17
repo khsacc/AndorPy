@@ -95,7 +95,7 @@ class PressureCalculatorWindow(QDialog):
         layout.addWidget(self.temp_group)
 
         # 3. 結果表示
-        self.lbl_result = QLabel("P = 0.000 +- 0.000 GPa")
+        self.lbl_result = QLabel("P = 0.000 +/- 0.000 GPa")
         self.lbl_result.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.lbl_result.setStyleSheet("background: #333; color: white; font-size: 24px; padding: 15px; border-radius: 5px;")
         layout.addWidget(self.lbl_result)
