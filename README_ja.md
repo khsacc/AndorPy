@@ -190,6 +190,7 @@ Andor製のカメラ（検出器）および分光器を制御し、スペクト
 
 ```json
 {
+    "dll_path": "C:\\Program Files\\Andor SDK\\Shamrock64\\ShamrockCIF.dll",
     "grating": [
         {
             "index": 1,
