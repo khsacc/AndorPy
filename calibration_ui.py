@@ -396,7 +396,7 @@ class CalibrationWindow(QDialog):
         center_wl = main_window.spin_centre_wl.value() if hasattr(main_window, 'spin_centre_wl') else 0.0
         date_str = datetime.now().strftime("%Y%m%d_%H%M%S")
         unit_sym = "nm" if self.radio_unit_wl.isChecked() else "cm-1"
-        if main_window.radio_2d.ischecked():
+        if main_window.radio_2d.isChecked():
             mode = "2D Image"
         else:
             mode = "1D Spectrum (Custom ROI)" if main_window.radio_1d_roi.isChecked() else "1D Spectrum (Full Range Binning)"
