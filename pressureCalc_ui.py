@@ -118,7 +118,6 @@ class PressureCalculatorWindow(QDialog):
         t_scale = self.combo_t_scale.currentText()
         curr_t = self.spin_t.value()
         
-        # ★ 修正: 判定関数に p_scale ではなく sensor を渡す
         is_valid, rng = PressureCalculator.is_temp_in_range(sensor, t_scale, curr_t)
         
         if self.radio_on.isChecked() and not is_valid and rng[0] is not None:
@@ -137,8 +136,8 @@ class PressureCalculatorWindow(QDialog):
             )
 
         p, dp = PressureCalculator.calculate(
-            sensor, p_scale, self.current_peak_val, lam0, self.current_peak_err,
-            current_t=curr_t, t0=self.spin_t0.value()
+            sensor, p_scale, self.current_peak_val, lam0, self.spin_lam0_t0.value(), self.current_peak_err,
+            current_t=curr_t, t0=self.spin_t0.value(), 
         )
         
         if p is not None:
@@ -155,7 +154,7 @@ class PressureCalculatorWindow(QDialog):
         if mode == "nm":
             self.combo_sensor.addItems(["Ruby", "Sm2+:SrB4O7"])
         else:
-            self.combo_sensor.addItems(["13C diamond 1st order", "Cubic BN", "Zircon v3(SiO4)"])
+            self.combo_sensor.addItems(["13C diamond 1st order", "Cubic BN", "Zircon B1g"])
         self.combo_sensor.blockSignals(False)
         self.on_sensor_changed()
 
@@ -168,27 +167,27 @@ class PressureCalculatorWindow(QDialog):
         self.combo_p_scale.blockSignals(True); self.combo_p_scale.clear()
         self.combo_t_scale.blockSignals(True); self.combo_t_scale.clear()
         
-        # PDFの仕様に合わせたセンサーごとの選択肢
         if sensor == "Ruby":
-            self.combo_p_scale.addItems(["Shen et al. 2020", "Mao et al. 1986", "Piermarini et al. 1975"])
-            self.combo_t_scale.addItems(["Ragan et al. 1992"])
+            self.combo_p_scale.addItems(["Shen et al. 2020", "Dorogokupets & Oganov 2007", "Holzapfel 2003", "Mao et al. 1986", "Piermarini et al. 1975"])
+            self.combo_t_scale.addItems(["Ragan et al. 1992", "Datchi et al. 1997"])
         elif sensor == "Sm2+:SrB4O7":
-            self.combo_p_scale.addItems(["Datchi 1997", "Leger 1990", "Rashchenko 2015"])
+            self.combo_p_scale.addItems(["Datchi et al. 1997 (MXB1986)", "Datchi et al. 2007 (DO2007)","Rashchenko 2015"])
             self.combo_t_scale.addItems(["Datchi et al. 2007"])
         elif sensor == "13C diamond 1st order":
-            self.combo_p_scale.addItems(["Schiferl et al. 1997"])
-            self.combo_t_scale.addItems(["Schiferl et al. 1997"])
+            self.combo_p_scale.addItems(["Schiferl et al. 1997", "Mysen and Yamashita 2010"])
+            self.combo_t_scale.addItems(["Schiferl et al. 1997", "Mysen and Yamashita 2010"]) # 温度の処理を実装する
         elif sensor == "Cubic BN":
             self.combo_p_scale.addItems(["Datchi et al. 2004"])
-        elif sensor == "Zircon v3(SiO4)":
-            self.combo_p_scale.addItems(["Schmidt et al. 2013"])
+        elif sensor == "Zircon B1g":
+            self.combo_p_scale.addItems(["Schmidt et al. 2013", "Takahashi et al. 2024"])
         
         self.combo_p_scale.blockSignals(False); self.combo_t_scale.blockSignals(False)
         self.on_p_scale_changed()
 
     def on_p_scale_changed(self):
         scale = self.combo_p_scale.currentText()
-        is_pt_scale = (scale == "Schiferl et al. 1997")
+        # 指定したスケールを含むかどうか
+        is_pt_scale = (scale in ["Schiferl et al. 1997", "Mysen and Yamashita 2010"] )
         self.radio_widget.setVisible(not is_pt_scale)
         self.lbl_t_scale_tag.setVisible(not is_pt_scale)
         self.combo_t_scale.setVisible(not is_pt_scale)
