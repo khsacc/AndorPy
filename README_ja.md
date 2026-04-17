@@ -6,8 +6,12 @@ Andor製のカメラ（検出器）および分光器を制御し、スペクト
 
 ## Screenshot
 
+### メイン画面
+分光器の基本的な操作、ファイルの保存、フィッティングの設定が行えます。
 ![](manuals/img/Screen_ja.jpg)
 
+### 横軸較正画面
+標準試料のスペクトルを取得し、Gaussian函数によるピークフィット、波長の較正までを行えます。
 ![](manuals/img/calibration_window.png)
 
 ## ✨ 主な機能 
