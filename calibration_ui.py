@@ -396,11 +396,24 @@ class CalibrationWindow(QDialog):
         center_wl = main_window.spin_centre_wl.value() if hasattr(main_window, 'spin_centre_wl') else 0.0
         date_str = datetime.now().strftime("%Y%m%d_%H%M%S")
         unit_sym = "nm" if self.radio_unit_wl.isChecked() else "cm-1"
+        if main_window.radio_2d.ischecked():
+            mode = "2D Image"
+        else:
+            mode = "1D Spectrum (Custom ROI)" if main_window.radio_1d_roi.isChecked() else "1D Spectrum (Full Range Binning)"
         file_path, _ = QFileDialog.getSaveFileName(self, "Save Config", f"config_{grating}_{center_wl}{unit_sym}_{date_str}.json", "JSON (*.json)")
         if not file_path: return
         c0, c1, c2 = self.calib_coeffs
         data = {
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "spectrometer_settings": {
+                "grating_grooves_per_mm": grating,
+                "center_wavelength_nm": center_wl,
+            },
+            "detector_settings": {
+                "mode": mode,
+                "roi_start": main_window.spin_vstart.value(),
+                "roi_end": main_window.spin_vend.value()
+            },
             "calibration_coefficients": {"c0": c0, "c1": c1, "c2": c2}
         }
         try:

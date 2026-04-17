@@ -30,7 +30,7 @@ Andor製のカメラ（検出器）および分光器を制御し、スペクト
     * Ruby（圧力シフト：Shen+ 2020, Mao+ 1986, Piermarini+ 1975. 温度補正：Ragan+ 1992）
     * Sm<sup>2+</sup>:SrB<sub>4</sub>O<sub>7</sub>（圧力シフト：Datchi+ 1997. 温度シフト：Datchi: 1997）
 
-## 🛠 必須環境 (Requirements)
+## 必須環境 (Requirements)
 
 * **OS**: Windows 10 / 11 (Andor SDKの動作環境に依存します)
 * **Python**: Python 3.8 以上
@@ -46,32 +46,36 @@ Andor製のカメラ（検出器）および分光器を制御し、スペクト
 * numpy
 * scipy
 
-## 📥 インストール方法 (Installation)
+## インストール方法 (Installation)
 
 1. コマンドプロンプトまたはPowerShellを開きます。
 2. 必要なPythonパッケージをインストールします。
-
-    pip install PyQt6 pyqtgraph numpy scipy
+    ```bash
+    pip install PyQt6 pyqtgraph numpy scipy pylablib
+    ```
 
 3. Andor SDKが正しくインストールされていることを確認します。
 4. このプロジェクトのディレクトリに移動し、スクリプトを実行します。
 
-## 🚀 使い方 (Usage)
+##  使い方 (Usage)
 
 ### 起動方法
 以下のコマンドでアプリケーションを起動します。
-
+    ```bash
     python ui.py
+    ```
 
 ※ ハードウェアを接続せずにUIのテストだけを行いたい場合は、デバッグモードで起動できます。
-
+    ```bash
     python ui.py --debug
+    ```
 
 ### 基本的な測定フロー
 1. **冷却の開始**:
    右側パネル「Measurement」内の「Cooler target temp」を設定し、カメラの冷却が安定するのを待ちます。
 2. **分光器の設定**:
-   「Spectrometer Configurations」セクションで、使用する回折格子と中心波長（またはラマンシフト）を入力し、**「Apply」** をクリックして分光器を動かします。
+   * 「Spectrometer Configurations」セクションで、使用する回折格子と中心波長（またはラマンシフト）を入力し、**「Apply」** をクリックして分光器を動かします。
+    * 「Calibrate x-axis」をクリックすると、別ウィンドウが開きます。
 3. **バックグラウンドの取得 (任意)**:
    シャッターを閉じた状態で「Background」セクションの **「Acquire and save background」** をクリックし、バックグラウンドデータを取得・保存します。
 4. **測定の実行**:
@@ -85,7 +89,7 @@ Andor製のカメラ（検出器）および分光器を制御し、スペクト
 * 「Fitting Configurations」を **ON** にすると、表示されているスペクトルに対してリアルタイムでフィッティングが行われます。
 * ダブルピークでフィッティングが成功している場合、「Pressure Calculation」セクションを **ON** にすることで、ルビーのR1ピークから圧力を自動計算して表示させることができます。
 
-## 📁 保存されるファイル
+##  保存されるファイル
 
 ### データファイル
 

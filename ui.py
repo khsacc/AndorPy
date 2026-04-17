@@ -44,7 +44,7 @@ class SpectrometerGUI(QMainWindow):
     def __init__(self, debug=False):
         super().__init__()
         self.debug = debug
-        self.setWindowTitle("Andor Spectrometer Live View" + (" [DEBUG MODE]" if self.debug else ""))
+        self.setWindowTitle("FluoraPressée: Spectrometer Live View" + (" [DEBUG MODE]" if self.debug else ""))
         self.resize(1400, 900)
 
         self.sensor_data = {
