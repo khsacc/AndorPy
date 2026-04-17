@@ -4,102 +4,108 @@ Author: Hiroki Kobayashi (Geochemical Research Center, The University of Tokyo).
 
 Andor製のカメラ（検出器）および分光器を制御し、スペクトルのリアルタイム取得からバックグラウンド補正、キャリブレーション、ピークフィッティング、そして高圧実験における圧力計算までを一貫して行うためのPythonベースのGUIアプリケーションです。
 
-## Screenshot
+## スクリーンショット
+
 
 ### メイン画面
-分光器の基本的な操作、ファイルの保存、フィッティングの設定が行えます。
-![](manuals/img/Screen_ja.jpg)
 
-### 横軸較正画面
-標準試料のスペクトルを取得し、Gaussian函数によるピークフィット、波長の較正までを行えます。
-![](manuals/img/calibration_window.png)
+* スペクトルの取得、保存
+    * 単発測定および連続測定
+    * インターバルを指定した連続保存・連続解析もできます。
+* 分光器の基本的な制御（回折格子の変更、中心位置の変更）
+* ROI の設定、イメージモード（CCDで取得した画像をそのまま出力）への切り替え
+* バックグラウンドの取得と差し引き
+* ピーク函数を用いたフィッティング
+    * 利用可能な函数は、Gaussian, Lorentzian, Pseudo Voigt, Double Gaussian, Double Lorentzian, Double Pseudo Voigt の6種類
+* 圧力計算ウィンドウを開く
 
-## ✨ 主な機能 
+![](manuals/img/MainWindowFull.jpg)
 
-* **リアルタイム測定・制御**
-  * 1Dスペクトル（Full Range / Custom ROI）および2Dイメージのリアルタイム表示
-  * 露光時間、アキュムレーション（積算）回数、検出器冷却温度の制御
-  * シングル測定、連続測定、および一定間隔での自動保存（Sequential measurements）
-* **分光器制御**
-  * 回折格子（Grating）および中心波長の制御
-  * 波長（nm）とラマンシフト（cm⁻¹）モードのシームレスな切り替え機能（励起波長設定対応）
-* **バックグラウンド補正・キャリブレーション**
-  * バックグラウンドスペクトルの取得、保存、リアルタイム差し引き
-  * X軸の波長キャリブレーション機能（標準物質のスペクトルのピークをGaussianでフィットし、ピーク位置を決定する→文献値を用いて、ピクセルと波長ないしRaman shiftの関係を２次式でフィット）
-* **リアルタイム・ピークフィッティング**
-  * Gauss, Lorentz, Pseudo Voigt 関数の単一ピーク・ダブルピークフィッティング
-  * フィッティング範囲の自動・手動設定
-* **圧力計算機能 (高圧実験向け)**
-  * 蛍光シフト・ラマンシフトによる圧力計算
-    <!-- * Ruby（圧力シフト：Shen+ 2020, Mao+ 1986, Piermarini+ 1975. 温度補正：Ragan+ 1992）
-    * Sm<sup>2+</sup>:SrB<sub>4</sub>O<sub>7</sub>（圧力シフト：Datchi+ 1997. 温度シフト：Datchi: 1997） -->
+### 横軸較正画面（「Calibrate x-axis」ボタンをクリックして開く）
+* 標準試料のスペクトルを取得し、ピーク検索、Gaussian函数によるピークフィット、波長の較正までを行えます。
+![](manuals/img/CalibrationWindow.png)
+
+### 横軸較正補助画面
+* よく使うネオンの波長領域のスペクトル（事前に測定してプログラム中に保存したもの）を表示してピークの帰属の参考にできます。
+![](manuals/img/CalibrationHelperWindow.png)
+
+### 圧力計算画面（「Open pressure calculator」ボタンをクリックして開く）
+
+* 横軸が波長のモードの場合、蛍光スケール、横軸がRaman shiftのモードの場合、Ramanスケールを用いた圧力計算が可能です。
+* 蛍光スケール
+    * ルビー（Cr<sup>3+</sup>:Al<sub>2</sub>O<sub>3</sub>）
+        * 圧力計算
+            * Shen et al., <i>High Press. Res.</i> (2020) [DOI: 10.1080/08957959.2020.1791107](https://doi.org/10.1080/08957959.2020.1791107)
+            * Holzapfel, <i>J. Appl. Phys.</i> (2003) [DOI: 10.1063/1.1525856](https://doi.org/10.1063/1.1525856)
+            * Mao et al., <i>J. Geophys. Res.</i> (1986) [DOI: 10.1029/JB091iB05p04673](https://doi.org/10.1029/JB091iB05p04673)
+            * Piermarini et al., <i>J. Appl. Phys.</i> (1975) [DOI: 10.1063/1.321957](10.1063/1.321957)
+        * 温度シフト
+    * Sm<sup>2+</sup>:SrB<sub>4</sub>O<sub>7</sub>
+* Raman スケール
+    * <sup>13</sup>C diamond first order
+    * Cubic BN
+    * Zircon B<sub>1g</sub>
+
+![](manuals/img/PressureCalculator.png)
+
 
 ## 必須環境 (Requirements)
 
 * **OS**: Windows 10 / 11 (Andor SDKの動作環境に依存します)
-* **Python**: Python 3.8 以上
+* **Python**: Python 3.8 以上, 3.13以下
 * **Hardware**:
   * Andor製 カメラ（検出器）
   * Andor製 分光器
 * **Drivers/SDK**:
   * Andor SDK (ドライバパッケージがPCにインストールされている必要があります)
 
-### 依存Pythonパッケージ
-* PyQt6
-* pyqtgraph
-* numpy
-* scipy
-
-## インストール方法 (Installation)
+## インストール方法 
 
 1. コマンドプロンプトまたはPowerShellを開きます。
 2. 必要なPythonパッケージをインストールします。
     ```bash
     pip install PyQt6 pyqtgraph numpy scipy pylablib
     ```
-
 3. Andor SDKが正しくインストールされていることを確認します。
-4. このプロジェクトのディレクトリに移動し、スクリプトを実行します。
+4. ディレクトリに、``spectrometerConfig.json``を作成し、``ShamrockCIF.dll``ファイルのパス、回折格子の情報および検出器の情報を記録する。``spectrometerConfig.json``を更新したのち、再度起動すれば、新しい内容が反映される。
 
-##  使い方 (Usage)
 
-### 起動方法
-以下のコマンドでアプリケーションを起動します。
+```json
+{
+    "dll_path": "C:\\Program Files\\Andor SDK\\Shamrock64\\ShamrockCIF.dll",
+    "grating": [
+        {
+            "index": 1,
+            "grooves": 2400,
+            "defaultROI": {"from": 80, "to": 100}
+        },
+        {
+            "index": 2,
+            "grooves": 1800,
+            "defaultROI": {"from": 115, "to": 130}
+        },
+        {
+            "index": 3,
+            "grooves": 1200,
+            "defaultROI": {"from": 113, "to": 125}
+        }
+    ],
+    "flip_x": true
+}
+```
+
+##  使い方 
+
     ```bash
     python ui.py
     ```
-
 ※ ハードウェアを接続せずにUIのテストだけを行いたい場合は、デバッグモードで起動できます。
+
     ```bash
     python ui.py --debug
     ```
 
-### 基本的な測定フロー
-1. **冷却の開始**:
-   右側パネル「Measurement」内の「Cooler target temp」を設定し、カメラの冷却が安定するのを待ちます。
-2. **分光器の設定**:
-   * 「Spectrometer Configurations」セクションで、使用する回折格子と中心波長（またはラマンシフト）を入力し、**「Apply」** をクリックして分光器を動かします。
-    * 「Calibrate x-axis」をクリックすると、別ウィンドウが開きます。
-3. **バックグラウンドの取得 (任意)**:
-   シャッターを閉じた状態で「Background」セクションの **「Acquire and save background」** をクリックし、バックグラウンドデータを取得・保存します。
-4. **測定の実行**:
-   * **Take single spectrum**: 設定された露光時間と積算回数で1回だけ測定を行います。
-   * **Commence Measurement**: 連続的にスペクトルを取得し、画面にリアルタイム表示します。停止するには「Terminate Measurement」を押します。
-5. **データの保存**:
-   * 現在表示されているスペクトルを保存するには **「Save data」** をクリックします。
-   * 自動的に連続保存したい場合は、**「▶ Sequential measurements」** を開き、ディレクトリと保存間隔（Skip frames）、最大保存枚数を設定して **「Start Sequential」** をクリックします。
-
-### フィッティングと圧力計算
-* 「Fitting Configurations」を **ON** にすると、表示されているスペクトルに対してリアルタイムでフィッティングが行われます。
-* 対応している圧力センサーとスケール
-    * Ruby
-        * 圧力計算：Shen+ 2020, Dorogokupets & Oganov 2007, Holzapfel 2003, Mao+ 1986, Piermarini+ 1975
-        * 温度補正：Ragan+ 1992, Datchi+ 2007 (高温用)
-    * Sm<sup>2+</sup>:SrB<sub>4</sub>O<sub>7</sub>
-        * 圧力計算：Datchi+ 1997, Datchi+ 2007, 
-        * 温度補正：Datchi+ 1997, Datchi 2007 
-
-##  保存されるファイル
+##  保存されるファイルの形式
 
 ### データファイル
 
@@ -188,48 +194,9 @@ Andor製のカメラ（検出器）および分光器を制御し、スペクト
 
 
 
-## 📁 ファイル構成
 
-* ui.py: メインのGUIアプリケーションスクリプト。
-* camera.py: Andorカメラを制御し、データや温度を取得するスレッドクラス。
-* spectrometer.py: Andor分光器の回折格子や波長を制御するモジュール。
-* analysis.py: スペクトルデータのピークフィッティング処理を行います。
-* calibration_ui.py: ピクセルから波長へのキャリブレーションを行うためのUI。
-* pressureCalc.py: ルビー蛍光から圧力を算出するモジュール。
-* spectrometerConfig.json: 回折格子の設定等を保存する設定ファイル（初回起動時に生成）。
 
-#### spectrometerConfig.json 
-
-ほぼ変えることがないと思われるため、UIから変更する仕様にはなっていない。必要があれば手動で変更する。
-
-```json
-{
-    "dll_path": "C:\\Program Files\\Andor SDK\\Shamrock64\\ShamrockCIF.dll",
-    "grating": [
-        {
-            "index": 1,
-            "grooves": 2400,
-            "defaultROI": {"from": 80, "to": 100}
-        },
-        {
-            "index": 2,
-            "grooves": 1800,
-            "defaultROI": {"from": 115, "to": 130}
-        },
-        {
-            "index": 3,
-            "grooves": 1200,
-            "defaultROI": {"from": 113, "to": 125}
-        }
-    ],
-    "flip_x": true
-}
-```
 
 ## 謝辞
-このプログラムは私が作成したものですが、機能やデザインに関する多くのアイデアは、私がStefan Klotz氏との共同研究のためにフランス・パリ・ソルボンヌ大学-CNRS UMR 7590 IMPMCに滞在した際によく使用していた、[Rubycond](https://github.com/CelluleProjet/Rubycond)プログラムから着想されたものです。Rubycondの開発者であるYiuri Garino (yiuri.garino (at) cnrs.fr)氏に感謝申し上げます。またこのプログラムは東京大学大学院理学系研究科附属地殻科学実験施設 鍵裕之
+このプログラムは私が作成したものですが、機能やデザインに関する多くのアイデアは、私がStefan Klotz氏との共同研究のためにフランス・パリ・ソルボンヌ大学-CNRS UMR 7590 IMPMCに滞在した際によく使用していた、[Rubycond](https://github.com/CelluleProjet/Rubycond) プログラムから着想されたものです。Rubycondの開発者であるYiuri Garino 氏に感謝申し上げます。またこのプログラムは東京大学大学院理学系研究科附属地殻科学実験施設 鍵裕之
 教授・小松一生准教授の研究室で開発されました。最後に、開発に際してGeminiに多くの有用な助けを借りたことを申し添えます。
-
-<!-- ## 使用した圧力スケールに関する参考文献
-
-*  -->

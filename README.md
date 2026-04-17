@@ -1,12 +1,14 @@
 Caution: This program is under active development!
 
+[Japanese version available here](./README_ja.md)
+
 # FluoraPressée: Andor Spectrometer Control & Analysis GUI
 
 Author: Hiroki Kobayashi (Geochemical Research Center, The University of Tokyo). https://orcid.org/0000-0002-3682-7558 E-mail as of 2026: hiroki (at) eqchem.s.u-tokyo.ac.jp
 
 A Python-based GUI application designed to control Andor cameras (detectors) and spectrometers. It seamlessly handles real-time spectrum acquisition, background subtraction, calibration, peak fitting, and pressure calculation for high-pressure experiments.
 
-## ✨ Features
+<!-- ## ✨ Features
 
 * **Real-time Measurement & Control**
   * Real-time display of 1D spectra (Full Range / Custom ROI) and 2D images.
@@ -93,4 +95,4 @@ Run the application with the following command:
 # Acknowledgement
 
 This program was developed from scratch, but many of my ideas about its design and functions come from [Rubycond](https://github.com/CelluleProjet/Rubycond) software developed by Yiuri Garino (yiuri.garino (at) cnrs.fr), which I heavily used during my stay at IMPMC, Sorbonne Universite, CNRS UMR 7590, Paris, France, where I worked with Dr Stefan Klotz.
-This program was developed using spectrometers at Geochemistry laboratory lead by Prof Hiroyuki Kagi and Prof Kazuki Komatsu, at the Geochemical Research Center, Graduate School of Science, The University of Tokyo. I used Gemini Pro for coding, without which this program would never be completed.
+This program was developed using spectrometers at Geochemistry laboratory lead by Prof Hiroyuki Kagi and Prof Kazuki Komatsu, at the Geochemical Research Center, Graduate School of Science, The University of Tokyo. I used Gemini Pro for coding, without which this program would never be completed. -->
