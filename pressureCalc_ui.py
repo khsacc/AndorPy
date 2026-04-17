@@ -175,7 +175,7 @@ class PressureCalculatorWindow(QDialog):
         if mode == "nm":
             self.combo_sensor.addItems(["Ruby", "Sm2+:SrB4O7"])
         else:
-            self.combo_sensor.addItems(["13C diamond 1st order", "Cubic BN", "Zircon B1g"])
+            self.combo_sensor.addItems(["13C diamond 1st order", "Cubic BN TO", "Zircon B1g"])
         self.combo_sensor.blockSignals(False)
         self.on_sensor_changed()
 
@@ -189,7 +189,7 @@ class PressureCalculatorWindow(QDialog):
         self.combo_t_scale.blockSignals(True); self.combo_t_scale.clear()
         
         if sensor == "Ruby":
-            self.combo_p_scale.addItems(["Shen et al. 2020", "Dorogokupets & Oganov 2007", "Holzapfel 2003", "Mao et al. 1986", "Piermarini et al. 1975"])
+            self.combo_p_scale.addItems(["Shen et al. 2020", "Dorogokupets and Oganov 2007", "Holzapfel 2003", "Mao et al. 1986", "Piermarini et al. 1975"])
             self.combo_t_scale.addItems(["Ragan et al. 1992", "Datchi et al. 1997"])
         elif sensor == "Sm2+:SrB4O7":
             self.combo_p_scale.addItems(["Datchi et al. 1997 (MXB1986)", "Datchi et al. 2007 (DO2007)", "Rashchenko 2015"])
@@ -197,8 +197,9 @@ class PressureCalculatorWindow(QDialog):
         elif sensor == "13C diamond 1st order":
             self.combo_p_scale.addItems(["Schiferl et al. 1997", "Mysen and Yamashita 2010"])
             self.combo_t_scale.addItems(["Schiferl et al. 1997", "Mysen and Yamashita 2010"])
-        elif sensor == "Cubic BN":
-            self.combo_p_scale.addItems(["Datchi et al. 2004"])
+        elif sensor == "Cubic BN TO":
+            self.combo_p_scale.addItems(["Kawamoto et al. 2004", "Datchi et al. 2004"])
+            self.combo_t_scale.addItems(["Kawamoto et al. 2004"])
         elif sensor == "Zircon B1g":
             self.combo_p_scale.addItems(["Schmidt et al. 2013", "Takahashi et al. 2024"])
         
@@ -206,9 +207,17 @@ class PressureCalculatorWindow(QDialog):
         self.on_p_scale_changed()
 
     def on_p_scale_changed(self):
+        sensor = self.combo_sensor.currentText()
         scale = self.combo_p_scale.currentText()
-        # 指定したスケールを含むかどうか
-        is_pt_scale = (scale in ["Schiferl et al. 1997", "Mysen and Yamashita 2010"] )
+        # 指定したスケールを含むかどうか。階層構造が複雑なので、だらだらif文で書く
+        is_pt_scale = False
+        if sensor == "13C diamond 1st order": 
+            if scale in ["Schiferl et al. 1997", "Mysen and Yamashita 2010"]:
+                is_pt_scale = True
+        elif sensor == "Cubic BN TO":
+            if scale in ["Datchi et al. 2004"]:
+                is_pt_scale = True
+
         self.radio_widget.setVisible(not is_pt_scale)
         self.lbl_t_scale_tag.setVisible(not is_pt_scale)
         self.combo_t_scale.setVisible(not is_pt_scale)
