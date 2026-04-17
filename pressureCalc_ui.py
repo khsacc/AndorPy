@@ -36,13 +36,19 @@ class PressureCalculatorWindow(QDialog):
         
         self.lbl_cur_peak = QLabel(f"0.000 {self.unit}")
         form.addRow(f"Current peak ({self.unit}):", self.lbl_cur_peak)
+
+        self.lbl_t_mandatory = QLabel("")
+        self.lbl_t_mandatory.setStyleSheet("height: 0;")
+        form.addRow(self.lbl_t_mandatory)
+        
+        # 現在の値を適用するボタン (温度補正ONのときは無効化される)
+        self.btn_apply_current = QPushButton("Use the current value as zero-pressure peak position")
+        form.addRow(self.btn_apply_current)
         
         self.spin_lam0 = CustomDoubleSpinBox()
         self.spin_lam0.setRange(-99999, 99999); self.spin_lam0.setDecimals(3)
         self.lbl_lam0_tag = QLabel(f"Zero-pressure peak ({self.unit}):")
         form.addRow(self.lbl_lam0_tag, self.spin_lam0)
-        self.btn_apply_current_lam0 = QPushButton("Apply current value as zero-pressure pos.")
-        form.addWidget(self.btn_apply_current_lam0)
         top_group.setLayout(form)
         layout.addWidget(top_group)
 
@@ -58,14 +64,16 @@ class PressureCalculatorWindow(QDialog):
         radio_h.addWidget(self.radio_off); radio_h.addWidget(self.radio_on)
         temp_v_layout.addWidget(self.radio_widget)
 
-        # 補正詳細フォーム (このウィジェットごと有効/無効を切り替える)
+        # 補正詳細フォーム
         self.t_form_widget = QWidget()
         self.t_form = QFormLayout(self.t_form_widget)
         
-        # Temperature Scale
         self.combo_t_scale = QComboBox()
         self.lbl_t_scale_tag = QLabel("Temperature Scale:")
         self.t_form.addRow(self.lbl_t_scale_tag, self.combo_t_scale)
+        
+        self.btn_set_lam0_t0 = QPushButton("Use the Current Value as the zero-pressure peak position at T0")
+        self.t_form.addRow(self.btn_set_lam0_t0)
         
         self.spin_lam0_t0 = CustomDoubleSpinBox()
         self.spin_lam0_t0.setRange(-99999, 99999); self.spin_lam0_t0.setDecimals(3)
@@ -87,7 +95,7 @@ class PressureCalculatorWindow(QDialog):
         layout.addWidget(self.temp_group)
 
         # 3. 結果表示
-        self.lbl_result = QLabel("P = 0.000 +/- 0.000 GPa")
+        self.lbl_result = QLabel("P = 0.000 +- 0.000 GPa")
         self.lbl_result.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.lbl_result.setStyleSheet("background: #333; color: white; font-size: 24px; padding: 15px; border-radius: 5px;")
         layout.addWidget(self.lbl_result)
@@ -101,16 +109,29 @@ class PressureCalculatorWindow(QDialog):
         self.spin_t.valueChanged.connect(self.calculate)
         self.spin_t0.valueChanged.connect(self.calculate)
         self.radio_on.toggled.connect(self.toggle_temp_ui)
-        self.btn_apply_current_lam0.clicked.connect(self.set_current_pos_as_lam0)
-
-    def set_current_pos_as_lam0(self):
-        self.spin_lam0.setValue(self.current_peak_val)
+        
+        # ボタンの接続
+        self.btn_apply_current.clicked.connect(self.apply_current_to_lam0)
+        self.btn_set_lam0_t0.clicked.connect(self.apply_current_to_lam0_t0)
 
     def toggle_temp_ui(self):
         is_on = self.radio_on.isChecked()
         self.t_form_widget.setEnabled(is_on)
         self.spin_lam0.setEnabled(not is_on)
+
+        self.btn_apply_current.setEnabled(not is_on)
+        
         self.calculate()
+
+    def apply_current_to_lam0(self):
+        """現在のピーク値を λ0 に適用 (温度補正OFF用)"""
+        if self.current_peak_val != 0:
+            self.spin_lam0.setValue(self.current_peak_val)
+
+    def apply_current_to_lam0_t0(self):
+        """現在のピーク値を λ0 at T0 に適用 (温度補正ON用)"""
+        if self.current_peak_val != 0:
+            self.spin_lam0_t0.setValue(self.current_peak_val)
 
     def calculate(self):
         sensor = self.combo_sensor.currentText()
@@ -136,8 +157,8 @@ class PressureCalculatorWindow(QDialog):
             )
 
         p, dp = PressureCalculator.calculate(
-            sensor, p_scale, self.current_peak_val, lam0, self.spin_lam0_t0.value(), self.current_peak_err,
-            current_t=curr_t, t0=self.spin_t0.value(), 
+            sensor, p_scale, self.current_peak_val, lam0, self.current_peak_err,
+            current_t=curr_t, t0=self.spin_t0.value()
         )
         
         if p is not None:
@@ -171,11 +192,11 @@ class PressureCalculatorWindow(QDialog):
             self.combo_p_scale.addItems(["Shen et al. 2020", "Dorogokupets & Oganov 2007", "Holzapfel 2003", "Mao et al. 1986", "Piermarini et al. 1975"])
             self.combo_t_scale.addItems(["Ragan et al. 1992", "Datchi et al. 1997"])
         elif sensor == "Sm2+:SrB4O7":
-            self.combo_p_scale.addItems(["Datchi et al. 1997 (MXB1986)", "Datchi et al. 2007 (DO2007)","Rashchenko 2015"])
+            self.combo_p_scale.addItems(["Datchi et al. 1997 (MXB1986)", "Datchi et al. 2007 (DO2007)", "Rashchenko 2015"])
             self.combo_t_scale.addItems(["Datchi et al. 2007"])
         elif sensor == "13C diamond 1st order":
             self.combo_p_scale.addItems(["Schiferl et al. 1997", "Mysen and Yamashita 2010"])
-            self.combo_t_scale.addItems(["Schiferl et al. 1997", "Mysen and Yamashita 2010"]) # 温度の処理を実装する
+            self.combo_t_scale.addItems(["Schiferl et al. 1997", "Mysen and Yamashita 2010"])
         elif sensor == "Cubic BN":
             self.combo_p_scale.addItems(["Datchi et al. 2004"])
         elif sensor == "Zircon B1g":
@@ -191,7 +212,15 @@ class PressureCalculatorWindow(QDialog):
         self.radio_widget.setVisible(not is_pt_scale)
         self.lbl_t_scale_tag.setVisible(not is_pt_scale)
         self.combo_t_scale.setVisible(not is_pt_scale)
-        if is_pt_scale: self.radio_on.setChecked(True)
+        if is_pt_scale: 
+            self.radio_on.setChecked(True)
+            self.lbl_t_mandatory.setText("Temperature input is mandatory for this scale!") 
+            self.lbl_t_mandatory.setStyleSheet("color: red; font-weight: bold; height:  1em;")
+        else:
+            self.lbl_t_mandatory.setText("") 
+            self.lbl_t_mandatory.setStyleSheet("height: 0em;")
+        
+        
         self.toggle_temp_ui()
 
     def set_current_peak(self, val, err=0.0):

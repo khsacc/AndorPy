@@ -44,7 +44,6 @@ class CameraThread(QThread):
             if self.debug:
                 print("[DEBUG MODE] Activating dummy camera...")
                 self.det_width, self.det_height = 1024, 127
-                time.sleep(1.0) # 初期化を模倣
                 self.init_finished.emit()
             else:
                 print("Connecting to camera and initializing cooler...")
