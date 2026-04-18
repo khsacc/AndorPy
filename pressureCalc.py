@@ -6,7 +6,7 @@ class PressureCalculator:
         "Ruby": 694.300,
         "Sm2+:SrB4O7": 685.410,
         "13C diamond 1st order": 1287.79,
-        "Cubic BN": 1058.3,
+        "Cubic BN TO": 1058.3,
         "Zircon B1g": 1008.6
     }
 
@@ -24,7 +24,11 @@ class PressureCalculator:
         },
         "Zircon B1g": {
             "Schmidt et al. 2013": (296,1223),
-            "Takahashi et al. 2024": (296, 923)
+            "Takahashi et al. 2024": (294, 1078)
+        },
+        "Cubic BN TO": {
+            "Datchi et al. 2004": (300, 723),
+            "Kawamoto et al. 2004": (300, 1000)
         }
     }
 
@@ -101,7 +105,7 @@ class PressureCalculator:
 )
                     return p, dp
                 
-                elif p_scale == "Dorogokupets & Oganov 2007":
+                elif p_scale == "Dorogokupets and Oganov 2007":
                     A=1884
                     m = 5.5
                     dlam=lam - lam0
@@ -165,7 +169,8 @@ class PressureCalculator:
             if sensor == "13C diamond 1st order":
                 if p_scale == "Schiferl et al. 1997":
                     return (nu - nu0) / 2.83, (nu_err) / 2.83
-            if sensor == "Cubic BN": 
+                
+            if sensor == "Cubic BN TO": 
                 if p_scale == "Datchi et al. 2004":
                     a = -9.3*10**-3
                     b = -1.54*10**-5
@@ -180,6 +185,11 @@ class PressureCalculator:
                     X = A**2 + 4*d*(nu - B)
                     dp = nu_err / np.sqrt(X)
                     return p, dp
+                if p_scale == "Kawamoto et al. 2004":
+                    a = 3.45
+                    a_err = 0.03
+                    p = (nu - nu0)/a 
+                    return p
                 
             if sensor == "Zircon B1g": 
                 if p_scale == "Schmidt et al. 2013":
@@ -234,4 +244,14 @@ class PressureCalculator:
                 calc_nu_at_t0 = takahashi_zircon_temp(t0)
                 offset = calc_nu_at_t0 - lam0_at_t0
                 return takahashi_zircon_temp(current_t) - offset
+        if sensor == "Cubic BN TO":
+            if t_scale == "Kawamoto et al. 2004":
+                def kawamoto_BN_temp(temp):
+                    a0 = 1060.6
+                    a1 = -0.010
+                    a2 = -1.42 * 10**-5
+                    return a0 + a1*temp + a2*temp**2
+                calc_nu_at_t0 = kawamoto_BN_temp(t0)
+                offset = calc_nu_at_t0 - lam0_at_t0
+                return kawamoto_BN_temp(current_t) - offset
         return lam0_at_t0
