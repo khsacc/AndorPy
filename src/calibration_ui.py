@@ -2,17 +2,17 @@ import json
 import os
 from datetime import datetime
 import numpy as np
-from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QPushButton, 
+from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QPushButton, 
                              QLabel, QTableWidget, QTableWidgetItem,
                              QCheckBox, QComboBox, QHeaderView, QWidget, 
                              QAbstractSpinBox, QDoubleSpinBox, QSplitter,
                              QScrollArea, QRadioButton, QFileDialog, QMessageBox, QSlider,
                              QListView) # QListView を追加
-from PyQt6.QtCore import Qt
+from PyQt5.QtCore import Qt
 import pyqtgraph as pg
 
-from calibration import CalibrationCore
-from calibration_helper import ReferenceHelperWindow
+from src.calibration import CalibrationCore
+from src.calibration_helper import ReferenceHelperWindow
 
 class CustomDoubleSpinBox(QDoubleSpinBox):
     def __init__(self, *args, **kwargs):
@@ -396,7 +396,7 @@ class CalibrationWindow(QDialog):
         center_wl = main_window.spin_centre_wl.value() if hasattr(main_window, 'spin_centre_wl') else 0.0
         date_str = datetime.now().strftime("%Y%m%d_%H%M%S")
         unit_sym = "nm" if self.radio_unit_wl.isChecked() else "cm-1"
-        if main_window.radio_2d.ischecked():
+        if main_window.radio_2d.isChecked():
             mode = "2D Image"
         else:
             mode = "1D Spectrum (Custom ROI)" if main_window.radio_1d_roi.isChecked() else "1D Spectrum (Full Range Binning)"

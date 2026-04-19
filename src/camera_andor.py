@@ -1,6 +1,6 @@
 import time
 import numpy as np
-from PyQt6.QtCore import QThread, pyqtSignal
+from PyQt5.QtCore import QThread, pyqtSignal
 
 # ダミーモード時はエラーを回避するためtry-exceptで囲む
 try:
@@ -8,7 +8,7 @@ try:
 except ImportError:
     Andor = None
 
-class CameraThread(QThread):
+class CameraThreadAndor(QThread):
     data_ready = pyqtSignal(str, np.ndarray)
     init_finished = pyqtSignal()
     temperature_ready = pyqtSignal(float)

@@ -1,7 +1,8 @@
-/__pycache__/*
+*/__pycache__/*
 /teste/
 /config/
 /memo.txt
 /memo/
 /*.json
 /config/
+ShamrockCIF.dll

@@ -5,21 +5,21 @@ import time
 import csv
 from datetime import datetime
 import numpy as np
-from PyQt6.QtWidgets import (QApplication, QMainWindow, QPushButton, QVBoxLayout, 
+from PyQt5.QtWidgets import (QApplication, QMainWindow, QPushButton, QVBoxLayout, 
                              QHBoxLayout, QWidget, QLabel, QRadioButton, QGroupBox, 
                              QSpinBox, QDoubleSpinBox, QStackedWidget, QComboBox, 
                              QScrollArea, QFileDialog, QButtonGroup, QGridLayout,
                              QDialog, QTextEdit, QAbstractSpinBox, QInputDialog, QCheckBox, QMessageBox)
-from PyQt6.QtCore import Qt, QTimer
+from PyQt5.QtCore import Qt, QTimer
 import pyqtgraph as pg
 
 # ---- 分割したモジュールのインポート ----
-from camera import CameraThread
-from spectrometer import SpectrometerController, SpectrometerMoveThread
-from analysis import DataAnalyzer
-from calibration_ui import CalibrationWindow
-from pressureCalc import PressureCalculator
-from pressureCalc_ui import PressureCalculatorWindow
+from src.camera import CameraThread
+from src.spectrometer import SpectrometerController, SpectrometerMoveThread
+from src.analysis import DataAnalyzer
+from src.calibration_ui import CalibrationWindow
+from src.pressureCalc import PressureCalculator
+from src.pressureCalc_ui import PressureCalculatorWindow
 # ----------------------------------------
 
 class CustomSpinBox(QSpinBox):
@@ -46,26 +46,6 @@ class SpectrometerGUI(QMainWindow):
         self.debug = debug
         self.setWindowTitle("FluoraPressée: Spectrometer Live View" + (" [DEBUG MODE]" if self.debug else ""))
         self.resize(1400, 900)
-
-        self.sensor_data = {
-            "Ruby": {
-                "scales": ["Piermarini et al. 1975", "Mao et al. hydro 1986", "Shen et al. 2020"],
-                "t_scales": ["Ragan 1992", "Datchi et al. 2007 Linear"],
-                "req_double": True,
-                "lam0_default": 694.2300
-            },
-            "Sm2+:SrB4O7": {
-                "scales": ["Datchi et al. 1997"],
-                "t_scales": ["Datchi et al. 1997"],
-                "req_double": False,
-                "lam0_default": 685.4100
-            }
-        }
-        self.t_scale_limits = {
-            "Ragan 1992": (15, 600),
-            "Datchi et al. 2007 Linear": (300, 600),
-            "Datchi et al. 1997": (300, 900)
-        }
 
         self.config = self.load_spectrometer_config()
 
@@ -98,7 +78,7 @@ class SpectrometerGUI(QMainWindow):
         self._seq_fit_failed = False
         self.seq_fitting_summary_path = None
 
-        self.spec_ctrl = SpectrometerController(debug=self.debug)
+        self.spec_ctrl = SpectrometerController(config=self.config, debug=self.debug)
         self.analyzer = DataAnalyzer()
 
         first_grating = self.config.get("grating", [{}])[0].get("grooves", 600)
@@ -557,7 +537,7 @@ class SpectrometerGUI(QMainWindow):
         self.init_dialog.setLayout(layout)
         self.init_dialog.show()
 
-        self.thread = CameraThread(debug=self.debug)
+        self.thread = CameraThread(config=self.config, debug=self.debug)
         self.thread.data_ready.connect(self.on_data_ready)
         self.thread.init_finished.connect(self.on_camera_initialized)
         self.thread.temperature_ready.connect(self.on_temperature_read)
@@ -920,6 +900,8 @@ class SpectrometerGUI(QMainWindow):
     def load_spectrometer_config(self):
         config_path = "spectrometerConfig.json"
         default_config = {
+            "model": "Andor",
+            "com_port": "COM3",
             "grating": [
                 {
                     "index": 1,
@@ -1170,8 +1152,6 @@ class SpectrometerGUI(QMainWindow):
             return False
             
         try:
-            spec_model = getattr(self.spec_ctrl, 'model_name', 'Unknown Spectrometer')
-            cam_model = getattr(self.thread, 'model_name', 'Unknown Camera')
             grating = self.combo_grating.currentText()
             center_wl = self.spin_centre_wl.value()
             acq_time = self.spin_acq_time.value()
@@ -1555,7 +1535,11 @@ class SpectrometerGUI(QMainWindow):
             
             min_x = np.min(x_data)
             max_x = np.max(x_data)
+            
+            # Plot design
             self.plot_widget.getViewBox().setLimits(xMin=min_x, xMax=max_x)
+            self.plot_widget.getViewBox().setDefaultPadding(0)
+            self.plot_widget.setClipToView(True)
             
             self.plot_scatter.setData(x_data, disp_data)
             
@@ -1603,7 +1587,7 @@ class SpectrometerGUI(QMainWindow):
                         self.fit_curve_sub1.clear()
                         self.fit_curve_sub2.clear()
                     
-                    text = f"<span style='color: white;'><b>Function:</b> {func}<br><br>"
+                    text = f"<span><b>Function:</b> {func}<br><br>"
                     
                     self.latest_fit_res = res.copy()
                     self.latest_fit_func = func
@@ -1643,7 +1627,7 @@ class SpectrometerGUI(QMainWindow):
                     self.current_w_peak1 = None
                     self.latest_fit_res = None
                     self.latest_fit_func = None
-                    self.fitting_text.setHtml("<span style='color: white;'>Fitting failed or out of range.</span>")
+                    self.fitting_text.setHtml("<span>Fitting failed or out of range.</span>")
                     
                     if getattr(self, 'is_sequential_running', False):
                         self._seq_fit_failed = True
@@ -1657,7 +1641,7 @@ class SpectrometerGUI(QMainWindow):
                 self.latest_fit_res = None
                 self.latest_fit_func = None
                 if self.radio_fit_on.isChecked():
-                     self.fitting_text.setHtml("<span style='color: white;'>Fitting failed. Paused for skipped frames.</span>")
+                     self.fitting_text.setHtml("<span>Fitting failed. Paused for skipped frames.</span>")
                 else:
                      self.fitting_text.setHtml("")
 
@@ -1774,10 +1758,10 @@ class SpectrometerGUI(QMainWindow):
 
 def print_software_and_author_info(): 
     print(
-        "\n========================================\n========================================\n"\
-        "Andor Spectrometer Control & Analysis\nHiroki Kobayashi (The University of Tokyo), 2026\n"\
+        "\n================================================================================\n================================================================================\n"\
+        "FluoraPressée: Spectrometer Control & Analysis for high-pressure experiments\nHiroki Kobayashi (The University of Tokyo), 2026\n"\
         "https://github.com/khsacc/AndorPy\n"\
-        "========================================\n========================================\n"
+        "================================================================================\n================================================================================\n"
     )
 
 def check_and_create_config():
